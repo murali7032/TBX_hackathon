@@ -1,9 +1,6 @@
 -- ============================================
 -- TBX Finance Assistant - Seed Data
--- ============================================
-
--- ============================================
--- BANK
+-- Canonical source: database/dataset
 -- ============================================
 
 INSERT INTO bank (bank_code, bank_name) VALUES
@@ -18,212 +15,26 @@ INSERT INTO bank (bank_code, bank_name) VALUES
 ('TMBL', 'TAMILNAD MERCANTILE BANK LIMITED'),
 ('RATN', 'RBL BANK LIMITED');
 
+INSERT INTO account (account_id, entity_id, account_number, program_id, available_balance, bank_code) VALUES
+('acfbe204-7541-492c-a352-040aa984bedc', 'f2f5e332-c2d1-4555-9a6b-65c7cd195077', '50200013729069', 21, -25907487.00,  'HDFC'),
+('6f306737-dfa8-4bf7-8003-be64034b8dea', '2d52dda2-d98a-4381-af80-45bdb173860c', '50200099284137', 21, -94766029.00,  'HDFC'),
+('bfbfe347-11d6-48d7-acff-4f091f59d34b', 'e767c3c1-3a0d-43b5-b2ff-06f49bdf3de2', '39208809622308', 4,  40842693.08,  'UBIN'),
+('212239b5-63d9-4da6-aa8c-46485e0f8a42', 'ac1a0654-461b-4216-95d1-bbcb9ab6da4e', '30123456789012', 46,    109283.80,  'SBIN'),
+('34448e78-c3fe-4b5d-be8c-a45a6349b8d4', 'e984c75d-aad6-4655-823a-4e9e06a869bc', '40100556677889', 21, 231680596.77,  'UTIB'),
+('5cecd2c2-f075-4bbd-a08b-b156ca48dc7e', 'e0000005-0000-0000-0000-000000000005', '60100112233445', 4, -131629423.33, 'HDFC'),
+('e767c3c1-3a0d-43b5-b2ff-06f49bdf3de2', '00000006-0000-0000-0000-000000000006', '70100334455667', 21,   8695000.75,  'KKBK'),
+('2d52dda2-d98a-4381-af80-45bdb173860c', '00000007-0000-0000-0000-000000000007', '80100123456789', 46,   3887946.81,  'CNRB'),
+('ac1a0654-461b-4216-95d1-bbcb9ab6da4e', '00000008-0000-0000-0000-000000000008', '90100987654321', 21,   3278516.63,  'SBIN'),
+('e984c75d-aad6-4655-823a-4e9e06a869bc', '00000009-0000-0000-0000-000000000009', '20100556677889', 46,  -117420771.35,'ICIC');
 
--- ============================================
--- ACCOUNT
--- ============================================
-
-INSERT INTO account (
-    account_id,
-    entity_id,
-    account_number,
-    program_id,
-    available_balance,
-    bank_code
-) VALUES
-(
-    'acfbe204-7541-492c-a352-040aa984bedc',
-    'f2f5e332-c2d1-4555-9a6b-65c7cd195077',
-    '50200013729069',
-    21,
-    -25907487.00,
-    'HDFC'
-),
-(
-    '6f306737-dfa8-4bf7-8003-be64034b8dea',
-    '2d52dda2-d98a-4381-af80-45bdb173860c',
-    '50200099284137',
-    21,
-    -94766029.00,
-    'HDFC'
-),
-(
-    'bfbfe347-11d6-48d7-acff-4f091f59d34b',
-    'e767c3c1-3a0d-43b5-b2ff-06f49f1d34b',
-    '39208809622308',
-    04,
-    40842693.08,
-    'UBIN'
-),
-(
-    '212239b5-63d9-4da6-aa8c-46485e0f8a42',
-    'ac1a0654-461b-4216-95d1-bbcb9ab6da4e',
-    '30123456789012',
-    46,
-    109283.80,
-    'SBIN'
-),
-(
-    '34448e78-c3fe-4b5d-be8c-a45a6349b8d4',
-    'e984c75d-aad6-4655-823a-4e9e06a869bc',
-    '40100556677889',
-    21,
-    231680596.77,
-    'UTIB'
-),
-(
-    '5cecd2c2-f075-4bbd-a08b-b156ca48dc7e',
-    'e0000005-0000-0000-0000-000000000005',
-    '60100112233445',
-    04,
-    -131629423.33,
-    'HDFC'
-),
-(
-    'e767c3c1-3a0d-43b5-b2ff-06f49f1d34b',
-    '00000006-0000-0000-0000-000000000006',
-    '70100334455667',
-    21,
-    8695000.75,
-    'KKBK'
-),
-(
-    '2d52dda2-d98a-4381-af80-45bdb173860c',
-    '00000007-0000-0000-0000-000000000007',
-    '80100123456789',
-    46,
-    3887946.81,
-    'CNRB'
-),
-(
-    'ac1a0654-461b-4216-95d1-bbcb9ab6da4e',
-    '00000008-0000-0000-0000-000000000008',
-    '90100987654321',
-    21,
-    3278516.63,
-    'SBIN'
-),
-(
-    'e984c75d-aad6-4655-823a-4e9e06a869bc',
-    '00000009-0000-0000-0000-000000000009',
-    '20100556677889',
-    46,
-    -117420771.35,
-    'ICIC'
-);
-
-
--- ============================================
--- TRANSACTION
--- ============================================
-
-INSERT INTO transaction (
-    transaction_id,
-    account_id,
-    transaction_date,
-    transaction_type,
-    description,
-    transaction_amount,
-    transaction_reference_id,
-    utr_number
-) VALUES
-(
-    '001cb576-eb28-44b1-a219-0f3f27093fad',
-    'acfbe204-7541-492c-a352-040aa984bedc',
-    '2026-06-24 18:24:06.000000',
-    'debit',
-    'FT -  95842568 -  50200013729069 - SELECTION ELECTRONICS   DAHISAR EAST',
-    14866.00,
-    '1715499972',
-    'jhI5nAdyb1qOEjmcB3JvWjC6tTO+ZPVqBFPm/GiErC4TRBWRQ5ylPG3p'
-),
-(
-    '0021433a-8d92-40e9-b811-5ba994747975',
-    '6f306737-dfa8-4bf7-8003-be64034b8dea',
-    '2026-05-14 11:31:37.000000',
-    'debit',
-    'UPI-NAVYUG SELECTION-XXXXXX8672-AUBL0002125-103293775381-260514201735136',
-    50000.00,
-    '103293775381',
-    'jhI5nAdyb3JvWjC9tzSzbvtkBlK+NSqsiL164ZK8Bl8cYg8y1l8='
-),
-(
-    '00baf475-8710-4d17-b626-d25fc311eb7f',
-    '5cecd2c2-f075-4bbd-a08b-b156ca48dc7e',
-    '2025-12-16 18:13:34.000000',
-    'credit',
-    'R/RATNR52025121600100235/ZBFLCTP405PBL15667333//SELECTRICITY TWO PRIVATE LIMITED/RATNR52025121600100235 /SELECTRICITY TWO PRIVATE LIMITED',
-    260000.00,
-    'S31125841',
-    NULL
-),
-(
-    '014b7179-e696-4837-9b8e-7164d171b760',
-    'acfbe204-7541-492c-a352-040aa984bedc',
-    '2026-06-24 06:39:10.000000',
-    'debit',
-    'NEFT  - UTIB0002678 - 95604250 - 915020031685136 - UMANG SELECTIONHAPURBPES DPF10129',
-    7959.00,
-    'HDFCH01078329532',
-    'jhI5nAdyb3JvWjC6tTO+ZPVqBFPm/GiErC4TRBWRQ5ylPG3p'
-),
-(
-    '000000ac-39c5-4eb3-9fe3-ed40ceecee5d',
-    'e984c75d-aad6-4655-823a-4e9e06a869bc',
-    '2025-12-03 16:24:54.000000',
-    'debit',
-    'NEFT/000483399203/ICIC/PARESH VIKRANT GHASE',
-    9241.00,
-    'S5314253',
-    NULL
-),
-(
-    '04818df6-e726-4405-a8e3-4f6c15caa956',
-    'e767c3c1-3a0d-43b5-b2ff-06f49f1d34b',
-    '2026-01-02 09:58:41.000000',
-    'credit',
-    'IMPS/P2A/600228462725/UTIB/918020101986700/00/INET/9211/SELECTIONMALIGAI/ZBFLCTP5L2PBL11476675/INWD48',
-    36810.00,
-    'S69244711',
-    NULL
-),
-(
-    '0178b656-4a7d-98e8-9540-f6e24caf',
-    'ac1a0654-461b-4216-95d1-bbcb9ab6da4e',
-    '2026-03-17 14:53:45.000000',
-    'debit',
-    'IMPS OW/507614422198/Gautam singh/SBIN/43292707719',
-    110.00,
-    NULL,
-    NULL
-),
-(
-    '0266384b-929c-478d-a7da-a54acf984343',
-    'acfbe204-7541-492c-a352-040aa984bedc',
-    '2026-06-24 06:30:27.000000',
-    'debit',
-    'NEFT  - ICIC0001241 - 95584112 - 124105002702 - SELECTION MOBILE',
-    66899.00,
-    'HDFCH01078324740',
-    'jhI5nAdyb3JvWjC6tTO+ZPVqBFPm/GiErC4TRBWRQ5ylPG3p'
-),
-(
-    '02c96198-4397-4160-b5ce-607f6696f581',
-    'acfbe204-7541-492c-a352-040aa984bedc',
-    '2026-06-24 06:56:01.000000',
-    'debit',
-    'NEFT  - ICIC0001241 - 95600270 - 124105002702 - SELECTION MOBILE',
-    79575.00,
-    'HDFCH01078342174',
-    'jhI5nAdyb3JvWjC6tTO+ZPVqBFPm/GiErC4TRBWRQ5ylPG3p'
-),
-(
-    '038969bd-5941-4d13-ba9f-dda911cc0b4e',
-    '6f306737-dfa8-4bf7-8003-be64034b8dea',
-    '2026-05-20 09:49:02.000000',
-    'debit',
-    'FT-RERELI2010000810-RELIANCEDIGITAL RETAIL LTD   SELECT CITY SAKET DELHI',
-    21156.00,
-    '1643797818',
-    'jhI5nAdyb3JvWjC7sDW9ZPtrAllbY+gS/wWLLijTRu8nX6op'
-);
+INSERT INTO transaction (transaction_id, account_id, transaction_date, transaction_type, description, transaction_amount, transaction_reference_id, utr_number) VALUES
+('001cb576-eb28-44b1-a219-0f3f27093fad', 'acfbe204-7541-492c-a352-040aa984bedc', '2026-06-24 18:24:06.000000', 'debit',  'FT -  95842568 -  50200013729069 - SELECTION ELECTRONICS   DAHISAR EAST',  14866.00,  '1715499972', 'jhI5nAdyb1qOEjmcB3JvWjC6tTO+ZPVqBFPm/GiErC4TRBWRQ5ylPG3p'),
+('0021433a-8d92-40e9-b811-5ba994747975', '6f306737-dfa8-4bf7-8003-be64034b8dea', '2026-05-14 11:31:37.000000', 'debit',  'UPI-NAVYUG SELECTION-XXXXXX8672-AUBL0002125-103293775381-260514201735136',      50000.00,  '103293775381','jhI5nAdyb1qOEjmcB3JvWjC9tzSzbvtkBlK+NSqsiL164ZK8Bl8cYg8y1l8='),
+('00baf475-8710-4d17-b626-d25fc311eb7f', '5cecd2c2-f075-4bbd-a08b-b156ca48dc7e', '2025-12-16 18:13:34.000000', 'credit', 'R/RATNR52025121600100235/ZBFLCTP405PBL15667333//SELECTRICITY TWO PRIVATE LIMITED/RATNR52025121600100235 /SELECTRICITY TWO PRIVATE LIMITED', 260000.00, 'S31125841', NULL),
+('014b7179-e696-4837-9b8e-7164d171b760', 'acfbe204-7541-492c-a352-040aa984bedc', '2026-06-24 06:39:10.000000', 'debit',  'NEFT  - UTIB0002678 - 95604250 - 915020031685136 - UMANG SELECTIONHAPURBPES DPF10129', 7959.00, 'HDFCH01078329532', 'jhI5nAdyb1qOEjmcB3JvWknJwkXCbf1jBFm1NhmQqR0EoF/PNGRDCa1+UTH2I/tV'),
+('000000ac-39c5-4eb3-9fe3-ed40ceecee5d', 'e984c75d-aad6-4655-823a-4e9e06a869bc', '2025-12-03 16:24:54.000000', 'debit',  'NEFT/000483399203/ICIC/PARESH VIKRANT GHASE',                                               9241.00,  'S5314253',  NULL),
+('04818df6-e726-4405-a8e3-4f6c15caa956', 'e767c3c1-3a0d-43b5-b2ff-06f49bdf3de2', '2026-01-02 09:58:41.000000', 'credit', 'IMPS/P2A/600228462725/UTIB/918020101986700/00/INET/9211/SELECTIONMALIGAI/ZBFLCTP5L2PBL11476675/INWD48', 36810.00, 'S69244711', NULL),
+('0178b656-4a7d-98e8-9540f6e24caf', 'ac1a0654-461b-4216-95d1-bbcb9ab6da4e', '2026-03-17 14:53:45.000000', 'debit',  'IMPS OW/507614422198/Gautam singh/SBIN/43292707719',                                          110.00,   NULL,       NULL),
+('0266384b-929c-478d-a7da-a54acf984343', 'acfbe204-7541-492c-a352-040aa984bedc', '2026-06-24 06:30:27.000000', 'debit',  'NEFT  - ICIC0001241 - 95584112 - 124105002702 - SELECTION MOBILE',                             66899.00,  'HDFCH01078324740', 'jhI5nAdyb1qOEjmcB3JvWknJwkXCbf1jBFm1NhSSrh+QRpxgqe0VEdKaiI24S8Up'),
+('02c96198-4397-4160-b5ce-607f6696f581', 'acfbe204-7541-492c-a352-040aa984bedc', '2026-06-24 06:56:01.000000', 'debit',  'NEFT  - ICIC0001241 - 95600270 - 124105002702 - SELECTION MOBILE',                             79575.00,  'HDFCH01078342174', 'jhI5nAdyb1qOEjmcB3JvWknJwkXCbf1jBFm1MBKUrRvYyGUaTtHlT1wi23x31CRl'),
+('038969bd-5941-4d13-ba9f-dda911cc0b4e', '6f306737-dfa8-4bf7-8003-be64034b8dea', '2026-05-20 09:49:02.000000', 'debit',  'FT-RERELI2010000810-RELIANCEDIGITAL RETAIL LTD   SELECT CITY SAKET DELHI',                     21156.00,  '1643797818', 'jhI5nAdyb1qOEjmcB3JvWjC7sDW9ZPtrAllbY+gS/wWLLijTRu8nX6op');
