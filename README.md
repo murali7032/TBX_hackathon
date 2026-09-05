@@ -28,6 +28,8 @@ Ask plain-language questions about banks, accounts, and transactions. Every numb
                               └─────────────────┘
 ```
 
+
+
 ### Request path
 
 1. **Ask** — User sends a natural-language question (`optimize_for` optional).
@@ -37,27 +39,29 @@ Ask plain-language questions about banks, accounts, and transactions. Every numb
 5. **Evidence** — Result rows + SQL kept for the UI.
 6. **Answer** — Plain-language reply narrated only from those rows.
 
+
+
 ### Agent tools
 
-| Tool | Purpose |
-|------|---------|
-| `read_database_guide` | Loads [`database/LLM_TOOL_GUIDE.md`](database/LLM_TOOL_GUIDE.md) |
-| `list_tables` | Column metadata from `information_schema` |
-| `run_sql_query` | Read-only `SELECT` / `WITH` |
-| `find_accounts` | Account search for clarification chips |
-| `analyze_debit_trends` | MoM spend + anomaly signals |
 
-### Data model
+| Tool                   | Purpose                                                          |
+| ---------------------- | ---------------------------------------------------------------- |
+| `read_database_guide`  | Loads `[database/LLM_TOOL_GUIDE.md](database/LLM_TOOL_GUIDE.md)` |
+| `list_tables`          | Column metadata from `information_schema`                        |
+| `run_sql_query`        | Read-only `SELECT` / `WITH`                                      |
+| `find_accounts`        | Account search for clarification chips                           |
+| `analyze_debit_trends` | MoM spend + anomaly signals                                      |
 
-```text
-bank (1) ──< account (many) ──< "transaction" (many)
-```
 
-Seed size: **10 banks · 10 accounts · 10 transactions**.
+
 
 ---
 
+
+
 ## Setup instructions
+
+
 
 ### Prerequisites
 
@@ -66,6 +70,8 @@ Seed size: **10 banks · 10 accounts · 10 transactions**.
 - Network access to the Postgres host (or your own Postgres with the seed loaded)
 - A **Google Gemini API key**
 
+
+
 ### 1. Clone
 
 ```powershell
@@ -73,19 +79,23 @@ git clone https://github.com/murali7032/TBX_hackathon.git
 cd TBX_hackathon
 ```
 
+
+
 ### 2. Database
 
 Demo connection (remote EC2 Postgres):
 
-| Setting | Value |
-|---------|--------|
-| Host | `50.17.70.100` |
-| Port | `5432` |
-| Database | `finance` |
-| User | `finance_user` |
+
+| Setting  | Value              |
+| -------- | ------------------ |
+| Host     | `192.174.40.108`   |
+| Port     | `5432`             |
+| Database | `finance`          |
+| User     | `finance_user`     |
 | Password | `finance_password` |
 
-Schema and seed notes: [`database/dataset`](database/dataset) · tool guide: [`database/LLM_TOOL_GUIDE.md`](database/LLM_TOOL_GUIDE.md)
+
+Schema and seed notes: `[database/dataset](database/dataset)` · tool guide: `[database/LLM_TOOL_GUIDE.md](database/LLM_TOOL_GUIDE.md)`
 
 Optional local Postgres via Docker:
 
@@ -115,21 +125,25 @@ GEMINI_OPTIMIZE_FOR=balanced
 DATABASE_GUIDE_PATH=../database/LLM_TOOL_GUIDE.md
 ```
 
-| Variable | Purpose |
-|----------|---------|
-| `GEMINI_API_KEY` | Required for `/chat` |
-| `GEMINI_OPTIMIZE_FOR` | `cost` \| `balanced` \| `intelligence` |
-| `GEMINI_MODEL` | Optional fixed model id (overrides mapping) |
-| `DATABASE_URL` | SQLAlchemy Postgres URL |
-| `DATABASE_GUIDE_PATH` | Path to the LLM schema guide |
+
+| Variable              | Purpose                                     |
+| --------------------- | ------------------------------------------- |
+| `GEMINI_API_KEY`      | Required for `/chat`                        |
+| `GEMINI_OPTIMIZE_FOR` | `cost` | `balanced` | `intelligence`        |
+| `GEMINI_MODEL`        | Optional fixed model id (overrides mapping) |
+| `DATABASE_URL`        | SQLAlchemy Postgres URL                     |
+| `DATABASE_GUIDE_PATH` | Path to the LLM schema guide                |
+
 
 Model mapping:
 
-| `optimize_for` | Model |
-|----------------|--------|
-| `cost` | `gemini-3.5-flash-lite` |
-| `balanced` | `gemini-3.5-flash` |
-| `intelligence` | `gemini-3.5-flash` |
+
+| `optimize_for` | Model                   |
+| -------------- | ----------------------- |
+| `cost`         | `gemini-3.5-flash-lite` |
+| `balanced`     | `gemini-3.5-flash`      |
+| `intelligence` | `gemini-3.5-flash`      |
+
 
 Start the API:
 
@@ -157,30 +171,34 @@ VITE_API_URL=http://127.0.0.1:8000
 npm run dev
 ```
 
-Open the URL Vite prints (usually [http://127.0.0.1:5173](http://127.0.0.1:5173)).
+Open the URL Vite prints (usually [http://localhost:5173](http://localhost:5173)).
 
 ### 5. Quick smoke test
 
-1. Open **Dashboard** — metrics and spend charts load from `/api/*`.
+1. Open **Dashboard** — metrics and spend charts load from `/api/`*.
 2. Open **TBX Insight** chat — ask: `What's the balance for HDFC accounts?`
 3. Expand **View evidence & SQL** — confirm rows + query.
 4. Try: `Find transaction with ref HDFCH01078329532`
 
 ---
 
+
+
 ## API map
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/chat` | NL Q&A via Gemini + tools |
-| `POST` | `/chat/feedback` | Thumbs up/down (down regenerates SQL) |
-| `GET` / `DELETE` | `/chat/{session_id}` | History / reset |
-| `GET` | `/health` | DB connectivity + row counts |
-| `GET` | `/api/banks` | Banks |
-| `GET` | `/api/accounts` | Accounts |
-| `GET` | `/api/transactions` | Transactions |
-| `POST` | `/api/sql` | Read-only SQL |
-| `POST` / `GET` | `/export/csv` · `/export/xlsx` | Evidence export |
+
+| Method           | Path                           | Description                           |
+| ---------------- | ------------------------------ | ------------------------------------- |
+| `POST`           | `/chat`                        | NL Q&A via Gemini + tools             |
+| `POST`           | `/chat/feedback`               | Thumbs up/down (down regenerates SQL) |
+| `GET` / `DELETE` | `/chat/{session_id}`           | History / reset                       |
+| `GET`            | `/health`                      | DB connectivity + row counts          |
+| `GET`            | `/api/banks`                   | Banks                                 |
+| `GET`            | `/api/accounts`                | Accounts                              |
+| `GET`            | `/api/transactions`            | Transactions                          |
+| `POST`           | `/api/sql`                     | Read-only SQL                         |
+| `POST` / `GET`   | `/export/csv` · `/export/xlsx` | Evidence export                       |
+
 
 Example chat body:
 
@@ -194,6 +212,8 @@ Example chat body:
 
 ---
 
+
+
 ## Product surfaces
 
 - **Dashboard** — debit/credit totals, spend by bank, top payees
@@ -201,6 +221,8 @@ Example chat body:
 - **Banks / Accounts / Transactions** — browse ledger tables
 
 ---
+
+
 
 ## Repo layout
 
