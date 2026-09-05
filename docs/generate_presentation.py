@@ -1,595 +1,641 @@
-"""Generate TBX Finance hackathon presentation deck."""
+"""Generate an aesthetically refined TBX Insight hackathon presentation."""
 from pathlib import Path
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
-from pptx.enum.shapes import MSO_SHAPE
-from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
-from pptx.oxml.ns import nsmap
-from pptx.oxml import parse_xml
+from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
+from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt, Emu
 
 OUT = Path(__file__).resolve().parent / "TBX_Insight_Hackathon_Presentation.pptx"
+OUT_ALT = Path(__file__).resolve().parent / "TBX_Insight_Presentation_v2.pptx"
 
+# Brand palette
 NAVY = RGBColor(0x0B, 0x1F, 0x3A)
+NAVY_DEEP = RGBColor(0x07, 0x16, 0x2A)
 CYAN = RGBColor(0x00, 0xAE, 0xEF)
+CYAN_SOFT = RGBColor(0xD9, 0xF3, 0xFC)
+CYAN_MID = RGBColor(0x4D, 0xC9, 0xF5)
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-SLATE = RGBColor(0x33, 0x41, 0x55)
+SLATE = RGBColor(0x1E, 0x29, 0x3B)
+BODY = RGBColor(0x33, 0x41, 0x55)
 MUTED = RGBColor(0x64, 0x74, 0x8B)
-LIGHT = RGBColor(0xF5, 0xF7, 0xFA)
+LIGHT = RGBColor(0xF1, 0xF5, 0xF9)
 CARD = RGBColor(0xFF, 0xFF, 0xFF)
-BORDER = RGBColor(0xE2, 0xE8, 0xF0)
-SOFT = RGBColor(0xE6, 0xF7, 0xFD)
+LINE = RGBColor(0xE2, 0xE8, 0xF0)
+WARM = RGBColor(0xF8, 0xFA, 0xFC)
+
+FONT = "Calibri"
+TOTAL = 14
 
 
-def set_run(run, size=14, bold=False, color=SLATE, font="Montserrat"):
-    run.font.name = font
+def set_run(run, size=14, bold=False, color=BODY, italic=False):
+    run.font.name = FONT
     run.font.size = Pt(size)
     run.font.bold = bold
+    run.font.italic = italic
     run.font.color.rgb = color
 
 
-def add_text(tf, text, size=14, bold=False, color=SLATE, align=PP_ALIGN.LEFT, space_after=6):
-    p = tf.paragraphs[0] if not tf.paragraphs[0].text else tf.add_paragraph()
-    if not tf.paragraphs[0].text and len(tf.paragraphs) == 1:
-        p = tf.paragraphs[0]
-    p.text = text
-    p.alignment = align
-    p.space_after = Pt(space_after)
-    for r in p.runs:
-        set_run(r, size=size, bold=bold, color=color)
-    return p
-
-
-def write_box(shape, lines, default_size=13):
-    """lines: list of (text, size, bold, color) or plain str."""
-    tf = shape.text_frame
-    tf.clear()
-    tf.word_wrap = True
-    first = True
-    for item in lines:
-        if isinstance(item, str):
-            text, size, bold, color = item, default_size, False, SLATE
-        else:
-            text, size, bold, color = item
-        if first:
-            p = tf.paragraphs[0]
-            first = False
-        else:
-            p = tf.add_paragraph()
-        p.text = text
-        p.space_after = Pt(4)
-        for r in p.runs:
-            set_run(r, size=size, bold=bold, color=color)
-
-
-def fill(shape, color):
+def fill_shape(shape, color):
     shape.fill.solid()
     shape.fill.fore_color.rgb = color
     shape.line.fill.background()
 
 
-def card(slide, left, top, width, height, fill_color=CARD, line_color=BORDER):
+def stroke(shape, color=LINE, width=1):
+    shape.line.color.rgb = color
+    shape.line.width = Pt(width)
+
+
+def round_rect(slide, left, top, width, height, fill=CARD, border=LINE, radius=0.1):
     s = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, left, top, width, height)
-    fill(s, fill_color)
-    s.line.color.rgb = line_color
-    s.line.width = Pt(1)
+    fill_shape(s, fill)
+    if border:
+        stroke(s, border, 1)
+    else:
+        s.line.fill.background()
     try:
-        s.adjustments[0] = 0.08
+        s.adjustments[0] = radius
     except Exception:
         pass
     return s
 
 
-def banner(slide, title, subtitle=None):
-    bar = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(13.333), Inches(1.05))
-    fill(bar, NAVY)
-    accent = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(1.05), Inches(13.333), Inches(0.08))
-    fill(accent, CYAN)
-
-    tb = slide.shapes.add_textbox(Inches(0.55), Inches(0.22), Inches(10.5), Inches(0.7))
-    tf = tb.text_frame
-    tf.clear()
-    p = tf.paragraphs[0]
-    p.text = title
-    set_run(p.runs[0], size=26, bold=True, color=WHITE)
-    if subtitle:
-        sub = slide.shapes.add_textbox(Inches(0.55), Inches(1.25), Inches(12), Inches(0.4))
-        stf = sub.text_frame
-        stf.clear()
-        sp = stf.paragraphs[0]
-        sp.text = subtitle
-        set_run(sp.runs[0], size=13, bold=False, color=MUTED)
-
-
-def footer(slide, page, total=14):
-    tb = slide.shapes.add_textbox(Inches(0.55), Inches(7.15), Inches(10), Inches(0.3))
-    tf = tb.text_frame
-    tf.clear()
-    p = tf.paragraphs[0]
-    p.text = "TBX Insight  ·  TBX Finance  ·  BVP Tech Catalyst Hackathon"
-    set_run(p.runs[0], size=10, color=MUTED)
-    nb = slide.shapes.add_textbox(Inches(11.6), Inches(7.15), Inches(1.2), Inches(0.3))
-    ntf = nb.text_frame
-    ntf.clear()
-    np = ntf.paragraphs[0]
-    np.text = f"{page} / {total}"
-    np.alignment = PP_ALIGN.RIGHT
-    set_run(np.runs[0], size=10, color=MUTED)
-
-
-def screenshot_slot(slide, left, top, width, height, label="Paste demo screenshot here"):
-    s = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, left, top, width, height)
-    fill(s, LIGHT)
-    s.line.color.rgb = CYAN
-    s.line.width = Pt(1.5)
-    # dashed look via caption
-    tf = s.text_frame
-    tf.clear()
-    tf.word_wrap = True
-    tf.paragraphs[0].alignment = PP_ALIGN.CENTER
-    p = tf.paragraphs[0]
-    p.text = "📷  SCREENSHOT PLACEHOLDER"
-    set_run(p.runs[0], size=14, bold=True, color=NAVY)
-    p2 = tf.add_paragraph()
-    p2.text = label
-    p2.alignment = PP_ALIGN.CENTER
-    set_run(p2.runs[0], size=11, color=MUTED)
-    p3 = tf.add_paragraph()
-    p3.text = "(Insert image → crop to fit)"
-    p3.alignment = PP_ALIGN.CENTER
-    set_run(p3.runs[0], size=10, color=MUTED)
+def rect(slide, left, top, width, height, color):
+    s = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left, top, width, height)
+    fill_shape(s, color)
     return s
 
 
-def blank_slide(prs):
-    return prs.slide_layouts[6]  # blank
+def oval(slide, left, top, width, height, color):
+    s = slide.shapes.add_shape(MSO_SHAPE.OVAL, left, top, width, height)
+    fill_shape(s, color)
+    return s
+
+
+def textbox(slide, left, top, width, height, lines, valign=MSO_ANCHOR.TOP):
+    """lines: list of dicts or tuples (text, size, bold, color, align?, space_after?)."""
+    box = slide.shapes.add_textbox(left, top, width, height)
+    tf = box.text_frame
+    tf.clear()
+    tf.word_wrap = True
+    tf.auto_size = None
+    try:
+        tf._txBody.bodyPr.set("anchor", {MSO_ANCHOR.TOP: "t", MSO_ANCHOR.MIDDLE: "ctr", MSO_ANCHOR.BOTTOM: "b"}[valign])
+    except Exception:
+        pass
+
+    first = True
+    for item in lines:
+        if isinstance(item, str):
+            text, size, bold, color, align, after = item, 13, False, BODY, PP_ALIGN.LEFT, 6
+        elif isinstance(item, dict):
+            text = item.get("t", "")
+            size = item.get("s", 13)
+            bold = item.get("b", False)
+            color = item.get("c", BODY)
+            align = item.get("a", PP_ALIGN.LEFT)
+            after = item.get("sa", 6)
+        else:
+            # tuple pad
+            text = item[0]
+            size = item[1] if len(item) > 1 else 13
+            bold = item[2] if len(item) > 2 else False
+            color = item[3] if len(item) > 3 else BODY
+            align = item[4] if len(item) > 4 else PP_ALIGN.LEFT
+            after = item[5] if len(item) > 5 else 6
+
+        p = tf.paragraphs[0] if first else tf.add_paragraph()
+        first = False
+        p.text = text
+        p.alignment = align
+        p.space_after = Pt(after)
+        p.space_before = Pt(0)
+        for r in p.runs:
+            set_run(r, size=size, bold=bold, color=color)
+    return box
+
+
+def write_in_shape(shape, lines, valign=MSO_ANCHOR.TOP):
+    tf = shape.text_frame
+    tf.clear()
+    tf.word_wrap = True
+    try:
+        shape.text_frame.paragraphs  # ensure
+        tf.auto_size = None
+    except Exception:
+        pass
+    first = True
+    for item in lines:
+        if isinstance(item, str):
+            text, size, bold, color, align, after = item, 13, False, BODY, PP_ALIGN.LEFT, 4
+        elif isinstance(item, dict):
+            text = item["t"]
+            size = item.get("s", 13)
+            bold = item.get("b", False)
+            color = item.get("c", BODY)
+            align = item.get("a", PP_ALIGN.LEFT)
+            after = item.get("sa", 4)
+        else:
+            text = item[0]
+            size = item[1] if len(item) > 1 else 13
+            bold = item[2] if len(item) > 2 else False
+            color = item[3] if len(item) > 3 else BODY
+            align = item[4] if len(item) > 4 else PP_ALIGN.LEFT
+            after = item[5] if len(item) > 5 else 4
+        p = tf.paragraphs[0] if first else tf.add_paragraph()
+        first = False
+        p.text = text
+        p.alignment = align
+        p.space_after = Pt(after)
+        for r in p.runs:
+            set_run(r, size=size, bold=bold, color=color)
+
+
+def page_bg(slide, tinted=False):
+    rect(slide, Inches(0), Inches(0), Inches(13.333), Inches(7.5), WARM if not tinted else LIGHT)
+    # soft decorative orbs
+    o1 = oval(slide, Inches(11.6), Inches(-0.6), Inches(2.4), Inches(2.4), CYAN_SOFT)
+    o2 = oval(slide, Inches(-0.8), Inches(6.2), Inches(2.0), Inches(2.0), CYAN_SOFT)
+
+
+def header(slide, kicker, title, subtitle=None):
+    """Slim branded header band."""
+    rect(slide, Inches(0), Inches(0), Inches(13.333), Inches(1.15), NAVY)
+    rect(slide, Inches(0), Inches(1.15), Inches(13.333), Inches(0.06), CYAN)
+    # small accent pill
+    pill = round_rect(slide, Inches(0.55), Inches(0.22), Inches(1.55), Inches(0.28), CYAN, None, 0.5)
+    write_in_shape(pill, [{"t": kicker.upper(), "s": 9, "b": True, "c": NAVY, "a": PP_ALIGN.CENTER, "sa": 0}])
+    textbox(
+        slide,
+        Inches(0.55),
+        Inches(0.52),
+        Inches(12),
+        Inches(0.5),
+        [{"t": title, "s": 24, "b": True, "c": WHITE, "sa": 0}],
+    )
+    if subtitle:
+        textbox(
+            slide,
+            Inches(0.55),
+            Inches(1.35),
+            Inches(12.2),
+            Inches(0.35),
+            [{"t": subtitle, "s": 12, "b": False, "c": MUTED, "sa": 0}],
+        )
+
+
+def footer(slide, page):
+    rect(slide, Inches(0), Inches(7.22), Inches(13.333), Inches(0.28), NAVY)
+    textbox(
+        slide,
+        Inches(0.55),
+        Inches(7.24),
+        Inches(9),
+        Inches(0.24),
+        [{"t": "TBX Insight  ·  Corporate Banking Infrastructure for a Connected Financial Ecosystem", "s": 9, "c": CYAN_MID, "sa": 0}],
+    )
+    textbox(
+        slide,
+        Inches(11.5),
+        Inches(7.24),
+        Inches(1.4),
+        Inches(0.24),
+        [{"t": f"{page:02d}  /  {TOTAL:02d}", "s": 9, "b": True, "c": WHITE, "a": PP_ALIGN.RIGHT, "sa": 0}],
+    )
+
+
+def shot_slot(slide, left, top, width, height, caption):
+    """Elegant screenshot drop zone."""
+    outer = round_rect(slide, left, top, width, height, WHITE, CYAN, 0.06)
+    # inner dashed-feel panel
+    inner = round_rect(
+        slide,
+        left + Inches(0.12),
+        top + Inches(0.12),
+        width - Inches(0.24),
+        height - Inches(0.24),
+        LIGHT,
+        None,
+        0.05,
+    )
+    write_in_shape(
+        inner,
+        [
+            {"t": "＋  Add screenshot", "s": 16, "b": True, "c": NAVY, "a": PP_ALIGN.CENTER, "sa": 8},
+            {"t": caption, "s": 11, "c": MUTED, "a": PP_ALIGN.CENTER, "sa": 4},
+            {"t": "Insert → Pictures  ·  replace this frame", "s": 10, "c": MUTED, "a": PP_ALIGN.CENTER, "sa": 0},
+        ],
+    )
+    return outer
+
+
+def section_label(slide, left, top, text):
+    pill = round_rect(slide, left, top, Inches(len(text) * 0.11 + 0.4), Inches(0.28), CYAN_SOFT, None, 0.5)
+    write_in_shape(pill, [{"t": text.upper(), "s": 9, "b": True, "c": NAVY, "a": PP_ALIGN.CENTER, "sa": 0}])
+
+
+def blank(prs):
+    return prs.slide_layouts[6]
 
 
 def build():
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
-    blank = blank_slide(prs)
-    total = 14
+    layout = blank(prs)
 
-    # —— 1 Title ——
-    s = prs.slides.add_slide(blank)
-    bg = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(13.333), Inches(7.5))
-    fill(bg, NAVY)
-    stripe = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(0.18), Inches(7.5))
-    fill(stripe, CYAN)
-    t = s.shapes.add_textbox(Inches(0.9), Inches(1.8), Inches(11), Inches(1))
-    tf = t.text_frame
-    p = tf.paragraphs[0]
-    p.text = "TBX INSIGHT"
-    set_run(p.runs[0], size=44, bold=True, color=WHITE)
-    t2 = s.shapes.add_textbox(Inches(0.9), Inches(2.7), Inches(11), Inches(1.2))
-    tf2 = t2.text_frame
-    p2 = tf2.paragraphs[0]
-    p2.text = "A grounded finance assistant that answers\nfrom your ledger — never from guesses."
-    set_run(p2.runs[0], size=22, bold=False, color=CYAN)
-    t3 = s.shapes.add_textbox(Inches(0.9), Inches(4.3), Inches(11), Inches(1.2))
-    tf3 = t3.text_frame
-    write_box(
-        t3,
-        [
-            ("TBX Finance  ·  BVP Tech Catalyst Hackathon", 14, True, WHITE),
-            ("Problem: Build a Finance Assistant That Actually Understands You", 13, False, RGBColor(0xCB, 0xD5, 0xE1)),
-            ("Stack: React · FastAPI · PostgreSQL · Google Gemini (Flash / Flash-Lite)", 12, False, RGBColor(0x94, 0xA3, 0xB8)),
-        ],
-    )
+    # ═══════════════════════════════════════
+    # 1 · TITLE
+    # ═══════════════════════════════════════
+    s = prs.slides.add_slide(layout)
+    rect(s, Inches(0), Inches(0), Inches(13.333), Inches(7.5), NAVY_DEEP)
+    # geometric accents
+    rect(s, Inches(0), Inches(0), Inches(0.22), Inches(7.5), CYAN)
+    oval(s, Inches(10.8), Inches(-1.2), Inches(4), Inches(4), RGBColor(0x0F, 0x2A, 0x4A))
+    oval(s, Inches(11.5), Inches(5.2), Inches(3), Inches(3), RGBColor(0x0D, 0x28, 0x45))
+    # cyan diagonal hint bar
+    rect(s, Inches(0), Inches(6.85), Inches(13.333), Inches(0.08), CYAN)
 
-    # —— 2 Agenda ——
-    s = prs.slides.add_slide(blank)
-    banner(s, "Agenda", "What we will cover in this demo")
+    textbox(s, Inches(0.9), Inches(1.55), Inches(10), Inches(0.35),
+            [{"t": "TBX FINANCE  ·  BVP TECH CATALYST HACKATHON", "s": 11, "b": True, "c": CYAN, "sa": 0}])
+    textbox(s, Inches(0.9), Inches(2.1), Inches(11), Inches(1.1),
+            [{"t": "TBX Insight", "s": 54, "b": True, "c": WHITE, "sa": 0}])
+    textbox(s, Inches(0.9), Inches(3.35), Inches(10), Inches(1.1),
+            [
+                {"t": "A grounded finance assistant that answers", "s": 20, "c": RGBColor(0xCB, 0xD5, 0xE1), "sa": 2},
+                {"t": "from your ledger — never from guesses.", "s": 20, "c": CYAN, "sa": 0},
+            ])
+    # bottom meta chips
+    for i, label in enumerate(["React + FastAPI", "PostgreSQL", "Gemini Flash / Lite", "Evidence-first UX"]):
+        x = 0.9 + i * 2.9
+        chip = round_rect(s, Inches(x), Inches(5.5), Inches(2.7), Inches(0.42), RGBColor(0x12, 0x2F, 0x4E), None, 0.4)
+        write_in_shape(chip, [{"t": label, "s": 11, "b": True, "c": WHITE, "a": PP_ALIGN.CENTER, "sa": 0}])
+
+    # ═══════════════════════════════════════
+    # 2 · AGENDA
+    # ═══════════════════════════════════════
+    s = prs.slides.add_slide(layout)
+    page_bg(s)
+    header(s, "Overview", "Agenda", "A focused path from problem → proof")
     items = [
-        ("01", "The problem — why finance chatbots fail without grounding"),
-        ("02", "Our approach — tools, SQL, evidence, and guardrails"),
-        ("03", "Architecture — end-to-end system diagram"),
-        ("04", "Model choice — lowest possible model, highest possible accuracy"),
-        ("05", "Demo flow — how a question becomes a verified answer"),
-        ("06", "Sample Q&A — grounded answers + screenshot slots"),
-        ("07", "Impact & next steps"),
+        ("01", "Problem", "Why finance Q&A fails without grounding"),
+        ("02", "Approach", "SQL-first tools, evidence, guardrails"),
+        ("03", "Architecture", "End-to-end system & request path"),
+        ("04", "Model choice", "Smallest model that stays accurate"),
+        ("05", "Demo flow", "Live walkthrough script"),
+        ("06", "Sample Q&A", "Grounded answers + screenshot slots"),
     ]
-    for i, (num, text) in enumerate(items):
-        y = 1.55 + i * 0.7
-        c = card(s, Inches(0.7), Inches(y), Inches(11.9), Inches(0.58), SOFT if i % 2 == 0 else CARD)
-        write_box(
-            c,
-            [(f"{num}    {text}", 15, True if i < 2 else False, NAVY)],
-        )
-    footer(s, 2, total)
+    for i, (num, title, desc) in enumerate(items):
+        col = i % 3
+        row = i // 3
+        x = 0.55 + col * 4.2
+        y = 1.95 + row * 2.35
+        c = round_rect(s, Inches(x), Inches(y), Inches(3.95), Inches(2.05), WHITE, LINE, 0.08)
+        # left accent
+        rect(s, Inches(x), Inches(y), Inches(0.1), Inches(2.05), CYAN)
+        textbox(s, Inches(x + 0.35), Inches(y + 0.35), Inches(3.3), Inches(1.5),
+                [
+                    {"t": num, "s": 28, "b": True, "c": CYAN, "sa": 6},
+                    {"t": title, "s": 18, "b": True, "c": NAVY, "sa": 6},
+                    {"t": desc, "s": 12, "c": MUTED, "sa": 0},
+                ])
+    footer(s, 2)
 
-    # —— 3 Problem ——
-    s = prs.slides.add_slide(blank)
-    banner(s, "The Problem", "Finance teams drown in lookup work — and invented numbers are a liability")
-    left = card(s, Inches(0.55), Inches(1.55), Inches(6.0), Inches(5.1))
-    write_box(
-        left,
-        [
-            ("Today’s pain", 16, True, NAVY),
-            ("", 6, False, MUTED),
-            ("• Dashboards & exports for routine questions", 13, False, SLATE),
-            ("• “What did we pay vendor X last month?” means", 13, False, SLATE),
-            ("   hunting reports or pinging finance ops", 13, False, SLATE),
-            ("• Same lookups, repeated — high-value work slips", 13, False, SLATE),
-            ("", 8, False, MUTED),
-            ("Why this is harder than a normal chatbot", 16, True, NAVY),
-            ("", 6, False, MUTED),
-            ("A wrong or invented figure is not a UX bug —", 13, False, SLATE),
-            ("it undermines reconciliation, audits, and trust.", 13, True, CYAN),
-        ],
-    )
-    right = card(s, Inches(6.8), Inches(1.55), Inches(5.9), Inches(5.1), NAVY)
-    write_box(
-        right,
-        [
-            ("Challenge", 16, True, CYAN),
-            ("", 8, False, WHITE),
-            ("Build a conversational assistant that:", 13, False, WHITE),
-            ("", 6, False, WHITE),
-            ("✓ Accepts plain-language finance questions", 13, False, WHITE),
-            ("✓ Answers only from real ledger data", 13, False, WHITE),
-            ("✓ Shows evidence users can verify", 13, False, WHITE),
-            ("✓ Says “I don’t know” when data is missing", 13, False, WHITE),
-            ("✓ Uses the smallest model that still works", 13, False, WHITE),
-            ("", 10, False, WHITE),
-            ("Scored heavily on Accuracy & Grounding (30%)", 12, True, CYAN),
-            ("and Model Efficiency (20%).", 12, True, CYAN),
-        ],
-    )
-    footer(s, 3, total)
+    # ═══════════════════════════════════════
+    # 3 · PROBLEM
+    # ═══════════════════════════════════════
+    s = prs.slides.add_slide(layout)
+    page_bg(s)
+    header(s, "Context", "The problem", "Routine finance questions shouldn’t require a dashboard expedition")
 
-    # —— 4 Approach ——
-    s = prs.slides.add_slide(blank)
-    banner(s, "Our Approach", "Compute in SQL · Explain in language · Never invent figures")
+    left = round_rect(s, Inches(0.55), Inches(1.75), Inches(6.05), Inches(4.9), WHITE, LINE, 0.08)
+    textbox(s, Inches(0.85), Inches(2.0), Inches(5.5), Inches(4.4),
+            [
+                {"t": "TODAY", "s": 10, "b": True, "c": CYAN, "sa": 8},
+                {"t": "Finance teams field the same lookups on repeat.", "s": 16, "b": True, "c": NAVY, "sa": 12},
+                {"t": "• Static reports & exports for simple questions", "s": 13, "c": BODY, "sa": 6},
+                {"t": "• Vendor spend / unreconciled status = wait on ops", "s": 13, "c": BODY, "sa": 6},
+                {"t": "• Everyday decisions slow down", "s": 13, "c": BODY, "sa": 14},
+                {"t": "THE STAKES", "s": 10, "b": True, "c": CYAN, "sa": 8},
+                {"t": "An invented number isn’t a minor bug —", "s": 14, "c": BODY, "sa": 4},
+                {"t": "it’s a liability for audits and trust.", "s": 14, "b": True, "c": NAVY, "sa": 0},
+            ])
+
+    right = round_rect(s, Inches(6.85), Inches(1.75), Inches(5.95), Inches(4.9), NAVY, None, 0.08)
+    textbox(s, Inches(7.2), Inches(2.05), Inches(5.3), Inches(4.4),
+            [
+                {"t": "CHALLENGE", "s": 10, "b": True, "c": CYAN, "sa": 10},
+                {"t": "Plain-language questions.\nLedger-truthful answers.", "s": 20, "b": True, "c": WHITE, "sa": 14},
+                {"t": "✓ Natural language understanding", "s": 13, "c": RGBColor(0xE2, 0xE8, 0xF0), "sa": 7},
+                {"t": "✓ Grounded retrieval only", "s": 13, "c": RGBColor(0xE2, 0xE8, 0xF0), "sa": 7},
+                {"t": "✓ Verifiable evidence + SQL", "s": 13, "c": RGBColor(0xE2, 0xE8, 0xF0), "sa": 7},
+                {"t": "✓ Honest “insufficient data”", "s": 13, "c": RGBColor(0xE2, 0xE8, 0xF0), "sa": 7},
+                {"t": "✓ Lightweight model constraint", "s": 13, "c": RGBColor(0xE2, 0xE8, 0xF0), "sa": 14},
+                {"t": "Scoring focus: Grounding 30%  ·  Efficiency 20%", "s": 11, "b": True, "c": CYAN, "sa": 0},
+            ])
+    footer(s, 3)
+
+    # ═══════════════════════════════════════
+    # 4 · APPROACH
+    # ═══════════════════════════════════════
+    s = prs.slides.add_slide(layout)
+    page_bg(s)
+    header(s, "Method", "Our approach", "Compute in SQL · Explain in language · Never invent figures")
+
     pillars = [
-        ("Grounded retrieval", "Every fact comes from PostgreSQL via read-only SELECT / WITH tools — not model memory."),
-        ("Compute, then narrate", "Filters, joins, MoM %, anomalies run in SQL. The LLM explains results — it does not recalculate."),
-        ("Verifiable answers", "Plain-language reply + evidence table + SQL (collapsible) + CSV/Excel export."),
-        ("Guardrails", "Ambiguous account → clarification chips. Missing data → insufficient_data. Thumbs-down → retry different SQL."),
+        ("01", "Grounded retrieval", "Every fact comes from PostgreSQL via read-only SELECT tools — never model memory."),
+        ("02", "Compute, then narrate", "Filters, MoM %, anomalies run in SQL. The LLM only explains returned rows."),
+        ("03", "Verifiable answers", "Plain answer + evidence table + collapsible SQL + CSV / Excel export."),
+        ("04", "Hard guardrails", "Ambiguity → chips. Missing data → say so. Thumbs-down → regenerate SQL."),
     ]
-    for i, (title, body) in enumerate(pillars):
-        col = i % 2
-        row = i // 2
-        x = 0.55 + col * 6.35
-        y = 1.55 + row * 2.55
-        c = card(s, Inches(x), Inches(y), Inches(6.05), Inches(2.3))
-        write_box(
-            c,
-            [
-                (f"{i+1:02d}  {title}", 16, True, NAVY),
-                ("", 8, False, MUTED),
-                (body, 13, False, SLATE),
-            ],
-        )
-    footer(s, 4, total)
+    for i, (num, title, body) in enumerate(pillars):
+        col, row = i % 2, i // 2
+        x, y = 0.55 + col * 6.4, 1.85 + row * 2.45
+        c = round_rect(s, Inches(x), Inches(y), Inches(6.1), Inches(2.2), WHITE, LINE, 0.08)
+        badge = round_rect(s, Inches(x + 0.3), Inches(y + 0.35), Inches(0.7), Inches(0.7), CYAN_SOFT, None, 0.2)
+        write_in_shape(badge, [{"t": num, "s": 16, "b": True, "c": NAVY, "a": PP_ALIGN.CENTER, "sa": 0}])
+        textbox(s, Inches(x + 1.2), Inches(y + 0.4), Inches(4.5), Inches(1.5),
+                [
+                    {"t": title, "s": 17, "b": True, "c": NAVY, "sa": 8},
+                    {"t": body, "s": 13, "c": MUTED, "sa": 0},
+                ])
+    footer(s, 4)
 
-    # —— 5 Architecture ——
-    s = prs.slides.add_slide(blank)
-    banner(s, "Architecture", "TBX Insight — grounded tool-calling loop")
+    # ═══════════════════════════════════════
+    # 5 · ARCHITECTURE
+    # ═══════════════════════════════════════
+    s = prs.slides.add_slide(layout)
+    page_bg(s)
+    header(s, "System", "Architecture", "TBX Insight — grounded tool-calling loop")
 
-    boxes = [
-        (0.45, 1.7, 2.5, 1.35, "User", "TBX Insight UI\nReact + Vite"),
-        (3.3, 1.7, 2.7, 1.35, "API", "FastAPI\n/chat · /api · /export"),
-        (6.4, 1.7, 3.0, 1.35, "Agent", "Gemini tool loop\n+ session memory"),
-        (9.8, 1.7, 2.9, 1.35, "Data", "PostgreSQL\nbank · account · txn"),
+    layers = [
+        ("USER", "TBX Insight UI", "React · Vite\nChat + Dashboard", CYAN_SOFT, NAVY),
+        ("API", "FastAPI Gateway", "/chat · /api\n/export · /health", WHITE, NAVY),
+        ("AGENT", "Gemini Tool Loop", "Session memory\nSchema-aware tools", NAVY, WHITE),
+        ("DATA", "PostgreSQL 18", "bank · account\n\"transaction\"", WHITE, NAVY),
     ]
-    for x, y, w, h, title, body in boxes:
-        c = card(s, Inches(x), Inches(y), Inches(w), Inches(h), NAVY)
-        write_box(
-            c,
+    for i, (kicker, title, body, bg, fg) in enumerate(layers):
+        x = 0.45 + i * 3.2
+        c = round_rect(s, Inches(x), Inches(1.8), Inches(2.95), Inches(2.35), bg, LINE if bg != NAVY else None, 0.08)
+        textbox(s, Inches(x + 0.2), Inches(1.95), Inches(2.55), Inches(2.0),
+                [
+                    {"t": kicker, "s": 10, "b": True, "c": CYAN if bg == NAVY else CYAN, "sa": 6},
+                    {"t": title, "s": 15, "b": True, "c": fg if bg == NAVY else NAVY, "sa": 8},
+                    {"t": body, "s": 12, "c": RGBColor(0xCB, 0xD5, 0xE1) if bg == NAVY else MUTED, "sa": 0},
+                ])
+        if i < 3:
+            textbox(s, Inches(x + 2.85), Inches(2.7), Inches(0.4), Inches(0.4),
+                    [{"t": "›", "s": 22, "b": True, "c": CYAN, "sa": 0}])
+
+    tools = round_rect(s, Inches(0.45), Inches(4.4), Inches(12.4), Inches(1.05), WHITE, LINE, 0.08)
+    textbox(s, Inches(0.7), Inches(4.55), Inches(12), Inches(0.8),
             [
-                (title, 12, True, CYAN),
-                (body, 12, False, WHITE),
-            ],
-        )
-    # arrows as text
-    for x in [2.95, 6.0, 9.4]:
-        a = s.shapes.add_textbox(Inches(x), Inches(2.15), Inches(0.4), Inches(0.4))
-        tf = a.text_frame
-        p = tf.paragraphs[0]
-        p.text = "→"
-        set_run(p.runs[0], size=20, bold=True, color=CYAN)
+                {"t": "TOOL BELT", "s": 10, "b": True, "c": CYAN, "sa": 4},
+                {"t": "read_database_guide   ·   list_tables   ·   run_sql_query   ·   find_accounts   ·   analyze_debit_trends", "s": 12, "b": True, "c": NAVY, "sa": 0},
+            ])
 
-    tools = card(s, Inches(0.45), Inches(3.35), Inches(12.4), Inches(1.55))
-    write_box(
-        tools,
-        [
-            ("Tool belt (agent actions)", 14, True, NAVY),
-            ("read_database_guide  ·  list_tables  ·  run_sql_query  ·  find_accounts  ·  analyze_debit_trends", 12, False, SLATE),
-            ("Guardrails: read-only SQL · mask account # / UTR · quote \"transaction\" · no invented banks or balances", 12, False, MUTED),
-        ],
-    )
+    contract = round_rect(s, Inches(0.45), Inches(5.6), Inches(12.4), Inches(1.05), NAVY, None, 0.08)
+    textbox(s, Inches(0.7), Inches(5.75), Inches(12), Inches(0.8),
+            [
+                {"t": "RESPONSE CONTRACT", "s": 10, "b": True, "c": CYAN, "sa": 4},
+                {"t": "answer  +  evidence{sql, columns, rows}  +  confidence  +  status  +  choices / insights", "s": 12, "c": WHITE, "sa": 0},
+            ])
+    footer(s, 5)
 
-    outs = card(s, Inches(0.45), Inches(5.1), Inches(12.4), Inches(1.55), SOFT)
-    write_box(
-        outs,
-        [
-            ("Response contract", 14, True, NAVY),
-            ("answer (markdown)  +  evidence {columns, rows, sql}  +  confidence  +  status  +  choices / insights", 12, False, SLATE),
-            ("UX: clarification chips · MoM / anomaly callouts · collapsible evidence · thumbs-up/down retry · export", 12, False, SLATE),
-        ],
-    )
-    footer(s, 5, total)
+    # ═══════════════════════════════════════
+    # 6 · REQUEST PATH
+    # ═══════════════════════════════════════
+    s = prs.slides.add_slide(layout)
+    page_bg(s)
+    header(s, "System", "Request path", "From natural language to a verified ledger answer")
 
-    # —— 6 Architecture detail diagram ——
-    s = prs.slides.add_slide(blank)
-    banner(s, "Architecture — Request Path", "From natural language to verified ledger answer")
     steps = [
-        ("1. Ask", "User sends NL question\n+ optimize_for mode"),
-        ("2. Ambiguity", "Multi-account bank/last4?\n→ clarification chips"),
-        ("3. Plan", "LLM picks tools\nusing schema guide"),
-        ("4. Query", "Read-only SQL on\nPostgres finance DB"),
-        ("5. Verify", "Rows → evidence table\nSQL retained"),
-        ("6. Answer", "Narrate only from\nrows; flag gaps"),
+        ("1", "Ask", "NL question +\noptimize_for"),
+        ("2", "Clarify", "Ambiguous?\nAccount chips"),
+        ("3", "Plan", "LLM selects\ntools + SQL"),
+        ("4", "Query", "Read-only\nPostgres"),
+        ("5", "Evidence", "Rows + SQL\nretained"),
+        ("6", "Answer", "Narrate only\nfrom rows"),
     ]
-    for i, (t, b) in enumerate(steps):
+    for i, (n, title, body) in enumerate(steps):
         x = 0.4 + i * 2.15
-        c = card(s, Inches(x), Inches(1.7), Inches(2.0), Inches(2.4))
-        write_box(
-            c,
+        # circle number
+        circ = oval(s, Inches(x + 0.65), Inches(1.75), Inches(0.55), Inches(0.55), CYAN)
+        textbox(s, Inches(x + 0.65), Inches(1.82), Inches(0.55), Inches(0.45),
+                [{"t": n, "s": 14, "b": True, "c": NAVY, "a": PP_ALIGN.CENTER, "sa": 0}])
+        c = round_rect(s, Inches(x), Inches(2.5), Inches(2.0), Inches(1.85), WHITE, LINE, 0.08)
+        textbox(s, Inches(x + 0.15), Inches(2.7), Inches(1.7), Inches(1.5),
+                [
+                    {"t": title, "s": 14, "b": True, "c": NAVY, "a": PP_ALIGN.CENTER, "sa": 8},
+                    {"t": body, "s": 11, "c": MUTED, "a": PP_ALIGN.CENTER, "sa": 0},
+                ])
+        if i < 5:
+            textbox(s, Inches(x + 1.9), Inches(3.2), Inches(0.3), Inches(0.35),
+                    [{"t": "→", "s": 14, "b": True, "c": CYAN, "sa": 0}])
+
+    note = round_rect(s, Inches(0.45), Inches(4.7), Inches(12.4), Inches(1.95), NAVY, None, 0.08)
+    textbox(s, Inches(0.8), Inches(4.95), Inches(11.8), Inches(1.6),
             [
-                (t, 14, True, CYAN if i % 2 == 0 else NAVY),
-                ("", 6, False, MUTED),
-                (b, 11, False, SLATE),
-            ],
-        )
-    note = card(s, Inches(0.45), Inches(4.4), Inches(12.4), Inches(2.2), NAVY)
-    write_box(
-        note,
-        [
-            ("Data model (scoped)", 14, True, CYAN),
-            ("bank (1)  ——<  account (many)  ——<  \"transaction\" (many)", 13, False, WHITE),
-            ("Seed: 10 banks · 10 accounts · 10 transactions  |  Currency: single-company INR ledger", 12, False, RGBColor(0xCB, 0xD5, 0xE1)),
-            ("Hosting: React UI → FastAPI → Gemini API → PostgreSQL 18 on EC2", 12, False, RGBColor(0x94, 0xA3, 0xB8)),
-        ],
-    )
-    footer(s, 6, total)
+                {"t": "DATA MODEL", "s": 10, "b": True, "c": CYAN, "sa": 8},
+                {"t": "bank  (1)   ———<   account  (many)   ———<   \"transaction\"  (many)", "s": 15, "b": True, "c": WHITE, "sa": 10},
+                {"t": "Seed  ·  10 banks  ·  10 accounts  ·  10 transactions     |     Hosting  ·  React → FastAPI → Gemini → Postgres on EC2", "s": 12, "c": RGBColor(0x94, 0xA3, 0xB8), "sa": 0},
+            ])
+    footer(s, 6)
 
-    # —— 7 Model choice ——
-    s = prs.slides.add_slide(blank)
-    banner(s, "Model Choice Rationale", "Constraint: lowest possible model, highest possible accuracy (≤20B)")
-    left = card(s, Inches(0.55), Inches(1.55), Inches(6.1), Inches(5.1))
-    write_box(
-        left,
-        [
-            ("What we chose", 16, True, NAVY),
-            ("", 6, False, MUTED),
-            ("Primary: Gemini 3.5 Flash", 14, True, CYAN),
-            ("Balanced / Precision modes — strong tool use,", 12, False, SLATE),
-            ("schema following, and multi-turn coherence.", 12, False, SLATE),
-            ("", 8, False, MUTED),
-            ("Efficiency: Gemini 3.5 Flash-Lite", 14, True, CYAN),
-            ("Cost / Efficient mode — same tool loop,", 12, False, SLATE),
-            ("lower latency & token cost for routine lookups.", 12, False, SLATE),
-            ("", 8, False, MUTED),
-            ("Why not a frontier giant?", 14, True, NAVY),
-            ("Judged on efficiency. Accuracy comes from SQL", 12, False, SLATE),
-            ("grounding — not from a larger parametric brain.", 12, False, SLATE),
-        ],
-    )
-    right = card(s, Inches(6.9), Inches(1.55), Inches(5.8), Inches(5.1), SOFT)
-    write_box(
-        right,
-        [
-            ("How we keep a small model accurate", 15, True, NAVY),
-            ("", 6, False, MUTED),
-            ("1. Schema + LLM_TOOL_GUIDE injected as tools", 12, False, SLATE),
-            ("2. Hard rules: never invent; mask PII; read-only", 12, False, SLATE),
-            ("3. Aggregations in SQL (MoM via LAG, anomalies)", 12, False, SLATE),
-            ("4. Synthesis pass if tool budget exhausts", 12, False, SLATE),
-            ("5. User feedback → regenerate with new SQL", 12, False, SLATE),
-            ("", 10, False, MUTED),
-            ("Optimize_for modes in UI", 13, True, NAVY),
-            ("Efficient → flash-lite", 12, False, SLATE),
-            ("Balanced / Precision → flash", 12, False, SLATE),
-            ("", 8, False, MUTED),
-            ("Result: lightweight NL layer + heavy lifting in DB", 12, True, CYAN),
-        ],
-    )
-    footer(s, 7, total)
+    # ═══════════════════════════════════════
+    # 7 · MODEL CHOICE
+    # ═══════════════════════════════════════
+    s = prs.slides.add_slide(layout)
+    page_bg(s)
+    header(s, "Efficiency", "Model choice rationale", "Constraint: lowest possible model, highest possible accuracy (≤ 20B)")
 
-    # —— 8 Demo flow ——
-    s = prs.slides.add_slide(blank)
-    banner(s, "Demo Flow", "Suggested live walkthrough (5–7 minutes)")
+    # three model cards
+    models = [
+        ("EFFICIENT", "Gemini 3.5\nFlash-Lite", "Cost / speed mode\nRoutine lookups\nSame tool loop", CYAN_SOFT),
+        ("PRIMARY", "Gemini 3.5\nFlash", "Balanced & Precision\nStrong tool use\nMulti-turn coherence", NAVY),
+        ("NOT USED", "Frontier giants", "Scored down without\njustification\nAccuracy ≠ parameter count", WHITE),
+    ]
+    for i, (tag, name, body, bg) in enumerate(models):
+        x = 0.55 + i * 4.2
+        c = round_rect(s, Inches(x), Inches(1.8), Inches(3.95), Inches(2.7), bg, LINE if bg != NAVY else None, 0.08)
+        fg = WHITE if bg == NAVY else NAVY
+        muted = RGBColor(0xCB, 0xD5, 0xE1) if bg == NAVY else MUTED
+        textbox(s, Inches(x + 0.3), Inches(2.0), Inches(3.35), Inches(2.3),
+                [
+                    {"t": tag, "s": 10, "b": True, "c": CYAN if bg == NAVY else CYAN, "sa": 8},
+                    {"t": name, "s": 20, "b": True, "c": fg, "sa": 10},
+                    {"t": body, "s": 12, "c": muted, "sa": 0},
+                ])
+
+    how = round_rect(s, Inches(0.55), Inches(4.75), Inches(12.2), Inches(1.9), WHITE, LINE, 0.08)
+    textbox(s, Inches(0.85), Inches(4.95), Inches(11.6), Inches(1.55),
+            [
+                {"t": "HOW A SMALL MODEL STAYS ACCURATE", "s": 10, "b": True, "c": CYAN, "sa": 8},
+                {"t": "Schema guide as a tool   ·   Hard “never invent” rules   ·   Aggregations in SQL   ·   Synthesis if tools exhaust   ·   Feedback → new SQL", "s": 13, "b": True, "c": NAVY, "sa": 8},
+                {"t": "Result: lightweight NL layer + heavy lifting in the database — judged on efficiency without sacrificing grounding.", "s": 12, "c": MUTED, "sa": 0},
+            ])
+    footer(s, 7)
+
+    # ═══════════════════════════════════════
+    # 8 · DEMO FLOW
+    # ═══════════════════════════════════════
+    s = prs.slides.add_slide(layout)
+    page_bg(s)
+    header(s, "Live", "Demo flow", "Suggested 5–7 minute walkthrough")
+
     flow = [
-        ("A", "Open Dashboard", "Show debit/credit totals, spend-by-bank, top payees — workspace context."),
-        ("B", "Ask a balance question", "“What's the balance for HDFC accounts?” → clarification or summed balances + evidence."),
-        ("C", "Lookup by reference", "“Find transaction with ref HDFCH01078329532” → exact row, amount, narration."),
-        ("D", "Show the math", "Debits by month with MoM + chart; expand Evidence & SQL."),
-        ("E", "Anomaly / unreconciled", "Flag spend spikes or NULL UTR rows; export CSV."),
-        ("F", "Feedback loop", "Thumbs-down regenerates with alternate SQL path."),
+        ("A", "Dashboard", "Open workspace metrics, spend-by-bank, top payees"),
+        ("B", "Balances", "Ask HDFC balances — chips or summed evidence"),
+        ("C", "Reference", "Lookup ref HDFCH01078329532 → exact debit row"),
+        ("D", "Show the math", "Debits by month + MoM chart; expand SQL evidence"),
+        ("E", "Exceptions", "Unreconciled (UTR NULL) or anomaly callouts"),
+        ("F", "Feedback", "Thumbs-down regenerates with an alternate SQL path"),
     ]
     for i, (letter, title, body) in enumerate(flow):
-        y = 1.5 + i * 0.85
-        badge = card(s, Inches(0.55), Inches(y), Inches(0.7), Inches(0.7), NAVY)
-        write_box(badge, [(letter, 18, True, CYAN)])
-        box = card(s, Inches(1.45), Inches(y), Inches(11.2), Inches(0.7))
-        write_box(
-            box,
-            [(f"{title}  —  {body}", 13, False, SLATE)],
-        )
-    footer(s, 8, total)
+        y = 1.7 + i * 0.82
+        badge = oval(s, Inches(0.65), Inches(y + 0.08), Inches(0.55), Inches(0.55), NAVY if i % 2 == 0 else CYAN)
+        textbox(s, Inches(0.65), Inches(y + 0.15), Inches(0.55), Inches(0.45),
+                [{"t": letter, "s": 14, "b": True, "c": WHITE if i % 2 == 0 else NAVY, "a": PP_ALIGN.CENTER, "sa": 0}])
+        row = round_rect(s, Inches(1.45), Inches(y), Inches(11.25), Inches(0.7), WHITE, LINE, 0.1)
+        textbox(s, Inches(1.7), Inches(y + 0.12), Inches(10.8), Inches(0.5),
+                [{"t": f"{title}    —    {body}", "s": 14, "b": False, "c": NAVY, "sa": 0}])
+    footer(s, 8)
 
-    # —— 9 Sample Q&A 1 ——
-    s = prs.slides.add_slide(blank)
-    banner(s, "Sample Q&A — Balances", "Grounded in account.available_balance for bank_code = HDFC")
-    q = card(s, Inches(0.55), Inches(1.5), Inches(6.2), Inches(2.4), SOFT)
-    write_box(
-        q,
-        [
-            ("Question", 12, True, CYAN),
-            ("What's the balance for HDFC accounts?", 15, True, NAVY),
-            ("", 6, False, MUTED),
-            ("Expected assistant behavior", 12, True, MUTED),
-            ("List each HDFC account (masked last-4) with", 12, False, SLATE),
-            ("available_balance; optionally sum. Offer chips", 12, False, SLATE),
-            ("if user meant a single last-4.", 12, False, SLATE),
-        ],
-    )
-    a = card(s, Inches(6.95), Inches(1.5), Inches(5.8), Inches(2.4))
-    write_box(
-        a,
-        [
-            ("Sample answer (from seed data)", 12, True, CYAN),
-            ("HDFC has 3 accounts, e.g.:", 12, False, SLATE),
-            ("XXXX9069 → ₹ -2,59,07,487.00", 12, True, NAVY),
-            ("XXXX4137 → ₹ -9,47,66,029.00", 12, True, NAVY),
-            ("XXXX3445 → ₹ -13,16,29,423.33", 12, True, NAVY),
-            ("Combined ≈ ₹ -25,22,03,039.33", 12, True, NAVY),
-            ("(negative = overdraft / ledger style)", 11, False, MUTED),
-        ],
-    )
-    screenshot_slot(
-        s,
-        Inches(0.55),
-        Inches(4.1),
-        Inches(12.2),
-        Inches(2.6),
-        "Chat UI: HDFC balance question + answer + evidence dropdown",
-    )
-    footer(s, 9, total)
+    # ═══════════════════════════════════════
+    # 9 · SAMPLE Q&A BALANCES
+    # ═══════════════════════════════════════
+    s = prs.slides.add_slide(layout)
+    page_bg(s)
+    header(s, "Evidence", "Sample Q&A — Balances", "Grounded in account.available_balance for bank_code = HDFC")
 
-    # —— 10 Sample Q&A 2 ——
-    s = prs.slides.add_slide(blank)
-    banner(s, "Sample Q&A — Reference Lookup", "Search transaction_reference_id (plaintext)")
-    q = card(s, Inches(0.55), Inches(1.5), Inches(6.2), Inches(2.35), SOFT)
-    write_box(
-        q,
-        [
-            ("Question", 12, True, CYAN),
-            ("Find transaction with ref HDFCH01078329532", 14, True, NAVY),
-            ("", 6, False, MUTED),
-            ("Tool path: run_sql_query on \"transaction\"", 12, False, SLATE),
-            ("WHERE transaction_reference_id = …", 12, False, SLATE),
-        ],
-    )
-    a = card(s, Inches(6.95), Inches(1.5), Inches(5.8), Inches(2.35))
-    write_box(
-        a,
-        [
-            ("Sample answer", 12, True, CYAN),
-            ("Found 1 debit on 24 Jun 2026", 13, True, NAVY),
-            ("Amount: ₹7,959.00", 13, False, SLATE),
-            ("Narration: NEFT … UMANG SELECTION…", 12, False, SLATE),
-            ("Account linked; UTR on file (masked).", 12, False, SLATE),
-        ],
-    )
-    screenshot_slot(
-        s,
-        Inches(0.55),
-        Inches(4.05),
-        Inches(12.2),
-        Inches(2.65),
-        "Chat UI: reference lookup result + View evidence & SQL expanded",
-    )
-    footer(s, 10, total)
+    q = round_rect(s, Inches(0.55), Inches(1.7), Inches(6.15), Inches(2.2), CYAN_SOFT, None, 0.08)
+    textbox(s, Inches(0.85), Inches(1.9), Inches(5.6), Inches(1.8),
+            [
+                {"t": "QUESTION", "s": 10, "b": True, "c": CYAN, "sa": 6},
+                {"t": "What's the balance for HDFC accounts?", "s": 16, "b": True, "c": NAVY, "sa": 10},
+                {"t": "List each HDFC account (masked last-4) with balance; clarify if a single last-4 was intended.", "s": 12, "c": MUTED, "sa": 0},
+            ])
+    a = round_rect(s, Inches(6.9), Inches(1.7), Inches(5.85), Inches(2.2), WHITE, LINE, 0.08)
+    textbox(s, Inches(7.2), Inches(1.9), Inches(5.3), Inches(1.8),
+            [
+                {"t": "SAMPLE ANSWER (SEED)", "s": 10, "b": True, "c": CYAN, "sa": 6},
+                {"t": "XXXX9069  →  ₹ -2,59,07,487.00", "s": 13, "b": True, "c": NAVY, "sa": 3},
+                {"t": "XXXX4137  →  ₹ -9,47,66,029.00", "s": 13, "b": True, "c": NAVY, "sa": 3},
+                {"t": "XXXX3445  →  ₹ -13,16,29,423.33", "s": 13, "b": True, "c": NAVY, "sa": 6},
+                {"t": "Combined ≈ ₹ -25.22 Cr  ·  negative = ledger / overdraft style", "s": 11, "c": MUTED, "sa": 0},
+            ])
+    shot_slot(s, Inches(0.55), Inches(4.15), Inches(12.2), Inches(2.55),
+              "Chat UI — HDFC balance question, answer, and evidence dropdown")
+    footer(s, 9)
 
-    # —— 11 Sample Q&A 3 ——
-    s = prs.slides.add_slide(blank)
-    banner(s, "Sample Q&A — Reconciliation & Spend Math", "Unreconciled = UTR NULL · MoM via SQL LAG")
-    left = card(s, Inches(0.55), Inches(1.5), Inches(6.2), Inches(2.5), SOFT)
-    write_box(
-        left,
-        [
-            ("Q: Which transactions are still unreconciled?", 13, True, NAVY),
-            ("A: Rows with utr_number IS NULL — e.g. NEFT to", 12, False, SLATE),
-            ("Paresh Vikrant Ghase (₹9,241), IMPS Gautam", 12, False, SLATE),
-            ("Singh (₹110), and the inbound credit IMPS", 12, False, SLATE),
-            ("SELECTIONMALIGAI (₹36,810). State clearly if", 12, False, SLATE),
-            ("the dataset has no formal reconcile flag.", 12, False, MUTED),
-        ],
-    )
-    right = card(s, Inches(6.95), Inches(1.5), Inches(5.8), Inches(2.5))
-    write_box(
-        right,
-        [
-            ("Q: Show me the math — debits by month + MoM", 13, True, NAVY),
-            ("A: Monthly debit totals with MoM % from SQL;", 12, False, SLATE),
-            ("chart in UI; anomaly months flagged when", 12, False, SLATE),
-            ("spend ≫ median. Expand evidence for SQL.", 12, False, SLATE),
-            ("Total seed debit spend ≈ ₹2,49,806.00", 12, True, CYAN),
-        ],
-    )
-    screenshot_slot(
-        s,
-        Inches(0.55),
-        Inches(4.2),
-        Inches(6.0),
-        Inches(2.5),
-        "Screenshot: unreconciled answer",
-    )
-    screenshot_slot(
-        s,
-        Inches(6.75),
-        Inches(4.2),
-        Inches(6.0),
-        Inches(2.5),
-        "Screenshot: MoM chart + evidence",
-    )
-    footer(s, 11, total)
+    # ═══════════════════════════════════════
+    # 10 · SAMPLE REF
+    # ═══════════════════════════════════════
+    s = prs.slides.add_slide(layout)
+    page_bg(s)
+    header(s, "Evidence", "Sample Q&A — Reference lookup", "Search transaction_reference_id (plaintext)")
 
-    # —— 12 Dashboard screenshot ——
-    s = prs.slides.add_slide(blank)
-    banner(s, "Product Surface — Dashboard", "TBX Finance workspace overview (paste live UI)")
-    screenshot_slot(
-        s,
-        Inches(0.55),
-        Inches(1.55),
-        Inches(12.2),
-        Inches(5.2),
-        "Full-width Dashboard: metrics · spend by bank · top payees",
-    )
-    footer(s, 12, total)
+    q = round_rect(s, Inches(0.55), Inches(1.7), Inches(6.15), Inches(2.15), CYAN_SOFT, None, 0.08)
+    textbox(s, Inches(0.85), Inches(1.9), Inches(5.6), Inches(1.7),
+            [
+                {"t": "QUESTION", "s": 10, "b": True, "c": CYAN, "sa": 6},
+                {"t": "Find transaction with ref\nHDFCH01078329532", "s": 16, "b": True, "c": NAVY, "sa": 8},
+                {"t": "Tool: run_sql_query on \"transaction\"", "s": 12, "c": MUTED, "sa": 0},
+            ])
+    a = round_rect(s, Inches(6.9), Inches(1.7), Inches(5.85), Inches(2.15), WHITE, LINE, 0.08)
+    textbox(s, Inches(7.2), Inches(1.9), Inches(5.3), Inches(1.7),
+            [
+                {"t": "SAMPLE ANSWER", "s": 10, "b": True, "c": CYAN, "sa": 6},
+                {"t": "1 debit · 24 Jun 2026 · ₹7,959.00", "s": 15, "b": True, "c": NAVY, "sa": 8},
+                {"t": "Narration: NEFT … UMANG SELECTION…", "s": 12, "c": BODY, "sa": 4},
+                {"t": "UTR on file (masked in the reply)", "s": 12, "c": MUTED, "sa": 0},
+            ])
+    shot_slot(s, Inches(0.55), Inches(4.1), Inches(12.2), Inches(2.6),
+              "Chat UI — reference hit with View evidence & SQL expanded")
+    footer(s, 10)
 
-    # —— 13 Chat screenshot ——
-    s = prs.slides.add_slide(blank)
-    banner(s, "Product Surface — TBX Insight Chat", "Empty state + conversation (paste live UI)")
-    screenshot_slot(
-        s,
-        Inches(0.55),
-        Inches(1.55),
-        Inches(6.0),
-        Inches(5.2),
-        "Empty state: TBX Insight hero + suggestions",
-    )
-    screenshot_slot(
-        s,
-        Inches(6.75),
-        Inches(1.55),
-        Inches(6.0),
-        Inches(5.2),
-        "Active chat: answer · chips · evidence toggle",
-    )
-    footer(s, 13, total)
+    # ═══════════════════════════════════════
+    # 11 · SAMPLE UNRECONCILED / MOM
+    # ═══════════════════════════════════════
+    s = prs.slides.add_slide(layout)
+    page_bg(s)
+    header(s, "Evidence", "Sample Q&A — Exceptions & spend math", "Unreconciled ≈ UTR IS NULL  ·  MoM via SQL LAG")
 
-    # —— 14 Closing ——
-    s = prs.slides.add_slide(blank)
-    bg = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(13.333), Inches(7.5))
-    fill(bg, NAVY)
-    stripe = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(0.18), Inches(7.5))
-    fill(stripe, CYAN)
-    t = s.shapes.add_textbox(Inches(0.9), Inches(1.5), Inches(11), Inches(1))
-    p = t.text_frame.paragraphs[0]
-    p.text = "Business impact"
-    set_run(p.runs[0], size=28, bold=True, color=CYAN)
-    body = s.shapes.add_textbox(Inches(0.9), Inches(2.3), Inches(11.2), Inches(3.2))
-    write_box(
-        body,
-        [
-            ("Seconds to a trustworthy answer — no dashboard hunt.", 16, False, WHITE),
-            ("Every number is query-backed and exportable for audit.", 16, False, WHITE),
-            ("Small model + strong tools = efficient and accurate.", 16, False, WHITE),
-            ("", 12, False, WHITE),
-            ("Thank you", 32, True, WHITE),
-            ("TBX Insight  ·  TBX Finance  ·  Questions welcome", 14, False, CYAN),
-        ],
-    )
+    left = round_rect(s, Inches(0.55), Inches(1.7), Inches(6.15), Inches(2.2), WHITE, LINE, 0.08)
+    textbox(s, Inches(0.85), Inches(1.9), Inches(5.6), Inches(1.8),
+            [
+                {"t": "Q  ·  Which transactions are still unreconciled?", "s": 12, "b": True, "c": NAVY, "sa": 8},
+                {"t": "Rows with utr_number IS NULL — e.g. Paresh NEFT ₹9,241, Gautam IMPS ₹110, inbound credit ₹36,810. State clearly if no formal reconcile flag exists.", "s": 12, "c": MUTED, "sa": 0},
+            ])
+    right = round_rect(s, Inches(6.9), Inches(1.7), Inches(5.85), Inches(2.2), NAVY, None, 0.08)
+    textbox(s, Inches(7.2), Inches(1.9), Inches(5.3), Inches(1.8),
+            [
+                {"t": "Q  ·  Debits by month with MoM change", "s": 12, "b": True, "c": CYAN, "sa": 8},
+                {"t": "Monthly debit totals + MoM % from SQL; chart in UI; anomalies when spend ≫ median.", "s": 12, "c": RGBColor(0xCB, 0xD5, 0xE1), "sa": 8},
+                {"t": "Seed debit spend ≈ ₹2,49,806.00", "s": 13, "b": True, "c": WHITE, "sa": 0},
+            ])
+    shot_slot(s, Inches(0.55), Inches(4.15), Inches(6.0), Inches(2.55), "Screenshot — unreconciled answer")
+    shot_slot(s, Inches(6.75), Inches(4.15), Inches(6.0), Inches(2.55), "Screenshot — MoM chart + evidence")
+    footer(s, 11)
 
-    prs.save(OUT)
-    print(f"Wrote {OUT}")
+    # ═══════════════════════════════════════
+    # 12 · DASHBOARD SURFACE
+    # ═══════════════════════════════════════
+    s = prs.slides.add_slide(layout)
+    page_bg(s)
+    header(s, "Product", "Dashboard surface", "Paste your live TBX Finance workspace screenshot")
+    shot_slot(s, Inches(0.55), Inches(1.7), Inches(12.2), Inches(5.0),
+              "Full dashboard — metrics · spend by bank · top payees")
+    footer(s, 12)
+
+    # ═══════════════════════════════════════
+    # 13 · CHAT SURFACE
+    # ═══════════════════════════════════════
+    s = prs.slides.add_slide(layout)
+    page_bg(s)
+    header(s, "Product", "TBX Insight chat", "Empty state and an active grounded conversation")
+    shot_slot(s, Inches(0.55), Inches(1.7), Inches(6.0), Inches(5.0), "Empty state — hero + suggestions")
+    shot_slot(s, Inches(6.75), Inches(1.7), Inches(6.0), Inches(5.0), "Active chat — answer · chips · evidence")
+    footer(s, 13)
+
+    # ═══════════════════════════════════════
+    # 14 · CLOSE
+    # ═══════════════════════════════════════
+    s = prs.slides.add_slide(layout)
+    rect(s, Inches(0), Inches(0), Inches(13.333), Inches(7.5), NAVY_DEEP)
+    rect(s, Inches(0), Inches(0), Inches(0.22), Inches(7.5), CYAN)
+    oval(s, Inches(-1), Inches(-1), Inches(3.5), Inches(3.5), RGBColor(0x0F, 0x2A, 0x4A))
+    oval(s, Inches(11), Inches(5), Inches(3.5), Inches(3.5), RGBColor(0x0D, 0x28, 0x45))
+    rect(s, Inches(0), Inches(7.15), Inches(13.333), Inches(0.08), CYAN)
+
+    textbox(s, Inches(0.9), Inches(1.6), Inches(11), Inches(0.4),
+            [{"t": "BUSINESS IMPACT", "s": 11, "b": True, "c": CYAN, "sa": 0}])
+    textbox(s, Inches(0.9), Inches(2.15), Inches(11.2), Inches(2.4),
+            [
+                {"t": "Seconds to a trustworthy answer.", "s": 26, "b": True, "c": WHITE, "sa": 10},
+                {"t": "Every figure is query-backed and exportable.", "s": 18, "c": RGBColor(0xCB, 0xD5, 0xE1), "sa": 8},
+                {"t": "Small model + strong tools = efficient and accurate.", "s": 18, "c": RGBColor(0xCB, 0xD5, 0xE1), "sa": 0},
+            ])
+    textbox(s, Inches(0.9), Inches(5.0), Inches(11), Inches(1.2),
+            [
+                {"t": "Thank you", "s": 36, "b": True, "c": WHITE, "sa": 8},
+                {"t": "TBX Insight  ·  TBX Finance  ·  Questions welcome", "s": 14, "c": CYAN, "sa": 0},
+            ])
+
+    target = OUT
+    try:
+        # Probe write access without corrupting a half-written pptx
+        with open(OUT, "ab"):
+            pass
+    except PermissionError:
+        target = OUT_ALT
+
+    prs.save(target)
+    print(f"Wrote {target}")
+    if target == OUT_ALT:
+        print("Note: close the open PPTX in PowerPoint/Cursor, then re-run to refresh the main filename.")
 
 
 if __name__ == "__main__":
