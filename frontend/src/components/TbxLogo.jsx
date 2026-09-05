@@ -1,4 +1,6 @@
-/** Official-style TBX mark: shield-in-t + wordmark with cyan growth stroke on X. */
+import logoMark from "../assets/tbx-logo.png";
+
+/** TBX brand mark from official logo artwork + optional wordmark. */
 function TbxLogo({
   size = 36,
   showWordmark = false,
@@ -7,48 +9,27 @@ function TbxLogo({
   className = "",
 }) {
   const navy = "#0B1F3A";
-  const cyan = "#00AEEF";
-  const markFill = variant === "dark" ? "#E8F4FC" : "#FFFFFF";
+  const textColor = variant === "on-dark" ? "#F4F8FC" : navy;
 
   const mark = (
-    <svg
+    <img
       className="tbx-logo-mark"
+      src={logoMark}
+      alt=""
       width={size}
       height={size}
-      viewBox="0 0 48 48"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <circle cx="24" cy="24" r="23" fill={navy} />
-      {/* stylized t */}
-      <path
-        d="M15 15.5h18M24.5 15.5v21c0 1.2-.9 2.2-2.1 2.2h-.8c-1.2 0-2.1-1-2.1-2.2V24"
-        stroke={markFill}
-        strokeWidth="3.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {/* cyan arc */}
-      <path
-        d="M34.5 14.5a14 14 0 0 1-1.4 19.2"
-        stroke={cyan}
-        strokeWidth="3"
-        strokeLinecap="round"
-      />
-      {/* shield */}
-      <path
-        d="M21.6 19.2 24 17.6l2.4 1.6v2.8L24 23.6l-2.4-1.6v-2.8z"
-        fill={cyan}
-      />
-    </svg>
+      style={{ width: size, height: size }}
+      draggable={false}
+    />
   );
 
   if (!showWordmark) {
-    return <span className={`tbx-logo ${className}`}>{mark}</span>;
+    return (
+      <span className={`tbx-logo ${className}`} aria-hidden="true">
+        {mark}
+      </span>
+    );
   }
-
-  const textColor = variant === "on-dark" ? "#F4F8FC" : navy;
 
   return (
     <span className={`tbx-logo tbx-logo-with-wordmark ${className}`}>

@@ -1,14 +1,18 @@
 import { useEffect, useState } from "react";
 import { apiGet } from "../api";
+import PageLoader, { TableSkeleton } from "../components/PageLoader";
 
 function Banks() {
   const [banks, setBanks] = useState([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     apiGet("/api/banks")
       .then(setBanks)
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -16,24 +20,34 @@ function Banks() {
       <h1>Banks</h1>
       <p className="page-sub">Institutional bank directory from the TBX Finance ledger.</p>
       {error && <p className="error-text">{error}</p>}
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Code</th>
-              <th>Name</th>
-            </tr>
-          </thead>
-          <tbody>
-            {banks.map((bank) => (
-              <tr key={bank.bank_code}>
-                <td>{bank.bank_code}</td>
-                <td>{bank.bank_name}</td>
+
+      {loading ? (
+        <>
+          <PageLoader label="Loading banks…" hint="Reading institutional directory" />
+          <div className="table-wrap">
+            <TableSkeleton rows={6} cols={2} />
+          </div>
+        </>
+      ) : (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {banks.map((bank) => (
+                <tr key={bank.bank_code}>
+                  <td>{bank.bank_code}</td>
+                  <td>{bank.bank_name}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

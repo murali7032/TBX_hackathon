@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiGet } from "../api";
+import PageLoader, { TableSkeleton } from "../components/PageLoader";
 
 function maskAccount(num) {
   if (!num || num.length < 4) return "****";
@@ -19,12 +20,15 @@ function Accounts() {
   const [accounts, setAccounts] = useState([]);
   const [bankFilter, setBankFilter] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     const query = bankFilter ? `?bank_code=${encodeURIComponent(bankFilter)}` : "";
     apiGet(`/api/accounts${query}`)
       .then(setAccounts)
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   }, [bankFilter]);
 
   return (
@@ -39,30 +43,40 @@ function Accounts() {
         />
       </div>
       {error && <p className="error-text">{error}</p>}
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Account</th>
-              <th>Bank</th>
-              <th>Program</th>
-              <th>Balance</th>
-              <th>Number</th>
-            </tr>
-          </thead>
-          <tbody>
-            {accounts.map((acc) => (
-              <tr key={acc.account_id}>
-                <td className="mono">{acc.account_id.slice(0, 8)}…</td>
-                <td>{acc.bank_code}</td>
-                <td>{acc.program_id}</td>
-                <td>{formatMoney(acc.available_balance)}</td>
-                <td>{maskAccount(acc.account_number)}</td>
+
+      {loading ? (
+        <>
+          <PageLoader label="Loading accounts…" hint="Masking account numbers for display" />
+          <div className="table-wrap">
+            <TableSkeleton rows={7} cols={5} />
+          </div>
+        </>
+      ) : (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th>Bank</th>
+                <th>Program</th>
+                <th>Balance</th>
+                <th>Number</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {accounts.map((acc) => (
+                <tr key={acc.account_id}>
+                  <td className="mono">{acc.account_id.slice(0, 8)}…</td>
+                  <td>{acc.bank_code}</td>
+                  <td>{acc.program_id}</td>
+                  <td>{formatMoney(acc.available_balance)}</td>
+                  <td>{maskAccount(acc.account_number)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

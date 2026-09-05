@@ -16,6 +16,7 @@
 .tbx-logo {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   line-height: 1;
 }
@@ -23,8 +24,12 @@
 .tbx-logo-mark {
   display: block;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(12, 30, 46, 0.18);
-  border-radius: 50%;
+  object-fit: contain;
+  object-position: center;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
 .brand-block {
@@ -38,7 +43,7 @@
 }
 
 .collapsed-brand .tbx-logo-mark {
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  box-shadow: none;
 }
 
 .tbx-wordmark {
@@ -873,10 +878,24 @@
 .chat-message-avatar.avatar-assistant {
   background: transparent;
   padding: 0;
+  border: none;
+  overflow: visible;
+  display: grid;
+  place-items: center;
 }
 
+.chat-message-avatar.avatar-assistant .tbx-logo {
+  display: grid;
+  place-items: center;
+}
+
+.chat-message-avatar.avatar-assistant .tbx-logo,
 .chat-message-avatar.avatar-assistant .tbx-logo-mark {
   box-shadow: none;
+  padding: 0;
+  border-radius: 0;
+  width: 32px;
+  height: 32px;
 }
 
 .chat-message-content {
@@ -1028,4 +1047,150 @@
   .chat-empty h1 {
     font-size: 34px;
   }
+}
+
+/* —— Page loader —— */
+.tbx-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 48px 24px;
+  margin: 8px 0 20px;
+  border: 1px solid var(--tbx-border);
+  border-radius: 16px;
+  background:
+    radial-gradient(420px 180px at 50% 0%, rgba(0, 174, 239, 0.08), transparent 70%),
+    #fff;
+  box-shadow: var(--tbx-shadow);
+  animation: tbx-fade-up 0.35s ease both;
+}
+
+.tbx-loader-inline {
+  padding: 28px 16px;
+  margin: 0 0 16px;
+}
+
+.tbx-loader-mark {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  display: grid;
+  place-items: center;
+}
+
+.tbx-loader-mark .tbx-logo {
+  position: relative;
+  z-index: 1;
+  animation: tbx-loader-breathe 1.8s ease-in-out infinite;
+}
+
+.tbx-loader-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--tbx-cyan);
+  border-right-color: rgba(0, 174, 239, 0.25);
+  animation: tbx-loader-spin 1.1s linear infinite;
+}
+
+.tbx-loader-ring-delay {
+  inset: 8px;
+  border-top-color: var(--tbx-navy);
+  border-right-color: rgba(11, 31, 58, 0.2);
+  animation-duration: 1.6s;
+  animation-direction: reverse;
+}
+
+.tbx-loader-copy {
+  text-align: center;
+}
+
+.tbx-loader-label {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tbx-navy);
+  letter-spacing: -0.01em;
+}
+
+.tbx-loader-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tbx-muted);
+}
+
+.tbx-loader-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 18px;
+}
+
+.tbx-loader-bars span {
+  width: 4px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--tbx-cyan);
+  animation: tbx-loader-bar 0.9s ease-in-out infinite;
+}
+
+.tbx-loader-bars span:nth-child(1) { animation-delay: 0s; }
+.tbx-loader-bars span:nth-child(2) { animation-delay: 0.12s; height: 12px; }
+.tbx-loader-bars span:nth-child(3) { animation-delay: 0.24s; height: 16px; background: var(--tbx-navy); }
+.tbx-loader-bars span:nth-child(4) { animation-delay: 0.36s; height: 10px; }
+
+.tbx-skeleton-table {
+  padding: 14px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tbx-skeleton-head,
+.tbx-skeleton-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 12px;
+}
+
+.tbx-skeleton-head .tbx-skel {
+  height: 10px;
+  opacity: 0.7;
+}
+
+.tbx-skel {
+  display: block;
+  height: 14px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    #e8eef4 0%,
+    #f4f8fb 45%,
+    #e8eef4 90%
+  );
+  background-size: 200% 100%;
+  animation: tbx-shimmer 1.25s ease-in-out infinite;
+}
+
+@keyframes tbx-loader-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes tbx-loader-breathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.04); opacity: 0.88; }
+}
+
+@keyframes tbx-loader-bar {
+  0%, 100% { transform: scaleY(0.55); opacity: 0.45; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+
+@keyframes tbx-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
 }

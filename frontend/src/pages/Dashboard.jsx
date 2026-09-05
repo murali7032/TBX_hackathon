@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { apiGet } from "../api";
+import PageLoader from "../components/PageLoader";
 
 function formatMoney(value) {
   const n = Number(value);
@@ -284,8 +285,14 @@ function Dashboard() {
       </header>
 
       {error && <p className="error-text">{error}</p>}
-      {loading && <p className="dash-loading">Loading workspace totals…</p>}
 
+      {loading ? (
+        <PageLoader
+          label="Preparing dashboard…"
+          hint="Aggregating banks, accounts, and transactions"
+        />
+      ) : (
+        <>
       <div className="stat-grid dash-metrics">
         <MetricCard label="Debit spend" value={formatMoney(summary.debit)} />
         <MetricCard label="Credits" value={formatMoney(summary.credit)} />
@@ -328,6 +335,8 @@ function Dashboard() {
           Browse banks
         </Link>
       </div>
+        </>
+      )}
     </div>
   );
 }
