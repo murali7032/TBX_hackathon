@@ -26,7 +26,7 @@ function Transactions() {
   return (
     <div className="page">
       <h1>Transactions</h1>
-      <p className="page-sub">Credits and debits from the finance dataset.</p>
+      <p className="page-sub">Credits and debits recorded in the TBX Finance workspace.</p>
       <div className="filters">
         <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
           <option value="">All types</option>

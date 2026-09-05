@@ -279,4 +279,5 @@ Sensitive: mask account_number and utr_number in answers.
 Bare "reference" → transaction_reference_id; "UTR" → utr_number.
 transaction_type ∈ {credit, debit}. Quote "transaction" in SQL.
 Never invent rows; always use tool results. Prefer SELECT only.
+For MoM/growth use analyze_debit_trends. For ambiguous accounts use find_accounts + chips.
 ```

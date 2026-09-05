@@ -4,6 +4,7 @@ import { useLocation } from "react-router-dom";
 import ChatMessage from "../components/chat/ChatMessage";
 import ChatInput from "../components/chat/ChatInput";
 import SuggestedQuestion from "../components/chat/SuggestedQuestion";
+import TbxLogo from "../components/TbxLogo";
 
 const backendUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -33,9 +34,9 @@ function Chat() {
   const [optimizeFor, setOptimizeFor] = useState("balanced");
 
   const suggestedQuestions = [
-    "List all banks",
-    "Show HDFC accounts and balances",
-    "Total debits by month — is spend increasing?",
+    "What's the balance for HDFC accounts?",
+    "Show me the math: debits by month with MoM change",
+    "Is spend increasing — flag any anomalous months?",
     "Find transaction with ref HDFCH01078329532",
     "Which transactions are still unreconciled?",
   ];
@@ -67,8 +68,10 @@ function Chat() {
         tool_trace: data.tool_trace || [],
         confidence: data.confidence,
         status: data.status,
+        choices: data.choices || [],
+        insights: data.insights || [],
         userQuestion,
-        showFeedback: true,
+        showFeedback: !(data.choices && data.choices.length > 1),
         feedback: null,
         retried: Boolean(data.retried),
         ...extras,
@@ -210,24 +213,32 @@ function Chat() {
       <div className="chat-container">
         <div className="chat-toolbar">
           <label className="optimize-label">
-            Model mode
+            Response profile
             <select
               value={optimizeFor}
               onChange={(e) => setOptimizeFor(e.target.value)}
               disabled={loading}
             >
-              <option value="cost">cost (gemini-3.5-flash-lite)</option>
-              <option value="balanced">balanced (gemini-3.5-flash)</option>
-              <option value="intelligence">intelligence (gemini-3.5-flash)</option>
+              <option value="cost">Efficient</option>
+              <option value="balanced">Balanced</option>
+              <option value="intelligence">Precision</option>
             </select>
           </label>
         </div>
 
         {messages.length === 0 ? (
           <div className="chat-empty">
-            <div className="chat-logo">✦</div>
-            <h1>How can I help?</h1>
-            <p>Ask about banks, accounts, balances, and transactions.</p>
+            <div className="chat-hero-brand">
+              <TbxLogo size={56} />
+              <div className="chat-hero-copy">
+                <p className="chat-product-eyebrow">TBX Finance</p>
+                <h1>TBX Insight</h1>
+                <p className="chat-product-tagline">
+                  Grounded answers across banks, accounts, and ledgers —
+                  every figure traced to your data.
+                </p>
+              </div>
+            </div>
             <div className="suggested-questions">
               {suggestedQuestions.map((suggestedQuestion) => (
                 <SuggestedQuestion
@@ -248,6 +259,9 @@ function Chat() {
                 feedbackDisabled={loading}
                 onThumbsUp={() => handleThumbsUp(index)}
                 onThumbsDown={() => handleThumbsDown(index)}
+                onChooseAccount={(choice) => {
+                  if (choice?.follow_up) askQuestion(choice.follow_up);
+                }}
               />
             ))}
             {loading && (
@@ -272,8 +286,8 @@ function Chat() {
         />
 
         <p className="chat-disclaimer">
-          Answers are grounded in the finance Postgres dataset via Gemini tools.
-          Use 👎 to regenerate with a different SQL query.
+          TBX Insight answers only from your connected ledger data. Feedback
+          regenerates with an alternate SQL path when needed.
         </p>
       </div>
     </div>

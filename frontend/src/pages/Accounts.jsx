@@ -30,7 +30,7 @@ function Accounts() {
   return (
     <div className="page">
       <h1>Accounts</h1>
-      <p className="page-sub">Balances and bank linkage (account numbers masked).</p>
+      <p className="page-sub">Account balances and bank linkage — numbers masked for privacy.</p>
       <div className="filters">
         <input
           placeholder="Filter by bank code (e.g. HDFC)"

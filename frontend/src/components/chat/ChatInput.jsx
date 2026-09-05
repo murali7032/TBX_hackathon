@@ -12,12 +12,13 @@ function ChatInput({ value, onChange, onSubmit, loading }) {
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Ask about banks, balances, or transactions..."
+        placeholder="Ask TBX Insight about banks, balances, or transactions…"
         disabled={loading}
+        aria-label="Message TBX Insight"
       />
 
-      <button type="submit" disabled={!value.trim() || loading}>
-        {loading ? "..." : "↑"}
+      <button type="submit" disabled={!value.trim() || loading} aria-label="Send">
+        {loading ? "…" : "↑"}
       </button>
     </form>
   );

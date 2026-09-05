@@ -14,7 +14,7 @@ function Banks() {
   return (
     <div className="page">
       <h1>Banks</h1>
-      <p className="page-sub">Canonical bank codes from the finance dataset.</p>
+      <p className="page-sub">Institutional bank directory from the TBX Finance ledger.</p>
       {error && <p className="error-text">{error}</p>}
       <div className="table-wrap">
         <table className="data-table">

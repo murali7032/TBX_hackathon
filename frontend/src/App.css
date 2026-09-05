@@ -1690,3 +1690,145 @@
 .export-btn-primary:hover {
   background: #1f2937;
 }
+
+.clarify-block {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  border-radius: 12px;
+}
+
+.clarify-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #1e3a8a;
+}
+
+.clarify-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.clarify-chip {
+  border: 1px solid #93c5fd;
+  background: #fff;
+  color: #1d4ed8;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.clarify-chip:hover:not(:disabled) {
+  background: #dbeafe;
+}
+
+.clarify-chip:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.insight-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.insight-item {
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.insight-anomaly {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.insight-mom {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.row-anomaly {
+  background: #fef2f2;
+}
+
+.chart-anomaly-note {
+  font-size: 12px;
+  color: #b91c1c;
+  margin-top: 6px;
+}
+
+.evidence-collapsed-wrap {
+  margin-top: 10px;
+}
+
+.evidence-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+}
+
+.evidence-toggle:hover {
+  background: #f3f4f6;
+}
+
+.evidence-toggle.open {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+  background: #f3f4f6;
+}
+
+.evidence-toggle-chevron {
+  color: #6b7280;
+  width: 14px;
+}
+
+.evidence-toggle-label {
+  font-weight: 600;
+  color: #111827;
+}
+
+.evidence-toggle-meta {
+  margin-left: auto;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.evidence-dropdown {
+  border: 1px solid #e5e7eb;
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  padding: 12px;
+  background: #fff;
+}
+
+.evidence-sql-wrap {
+  margin-bottom: 10px;
+}
+
+.evidence-sql-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4b5563;
+  margin-bottom: 4px;
+}

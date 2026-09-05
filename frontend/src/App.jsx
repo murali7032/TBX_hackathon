@@ -9,6 +9,7 @@ import Accounts from "./pages/Accounts";
 import Transactions from "./pages/Transactions";
 
 import "./App.css";
+import "./theme.css";
 
 function App() {
   const [collapsed, setCollapsed] = useState(false);

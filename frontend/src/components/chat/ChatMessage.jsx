@@ -1,6 +1,8 @@
 import ReactMarkdown from "react-markdown";
+import { useState } from "react";
 import remarkGfm from "remark-gfm";
 import EvidenceChart from "./EvidenceChart";
+import TbxLogo from "../TbxLogo";
 
 /** Parse first GitHub-flavored markdown table into {columns, rows}. */
 export function parseMarkdownTable(text) {
@@ -117,42 +119,155 @@ function ExportButtons({ columns, rows }) {
 }
 
 function EvidenceBlock({ evidence, userQuestion, answerText }) {
+  const [open, setOpen] = useState(false);
   const table = resolveTable(evidence, answerText);
-  if (!table?.columns?.length) return null;
+  if (!table?.columns?.length && !table?.sql) return null;
+
+  // Prefer structured evidence for the dropdown; markdown-only tables still allowed
+  const hasEvidence = Boolean(evidence?.columns?.length || evidence?.sql || table?.columns?.length);
+  if (!hasEvidence) return null;
+
   const rows = table.rows || [];
+  const colsLower = (table.columns || []).map((c) => String(c).toLowerCase());
+  const anomIdx = colsLower.findIndex((c) => c === "is_anomaly");
+  const momIdx = colsLower.findIndex((c) => c.includes("mom"));
+  const rowCount = rows.length;
+  const title = momIdx >= 0 ? "Show me the math" : "Evidence & SQL";
 
   return (
-    <div className="evidence-block">
-      <div className="evidence-header">
-        <div className="evidence-title">Results table</div>
-        <ExportButtons columns={table.columns} rows={rows} />
+    <div className="evidence-block evidence-collapsed-wrap">
+      {/* Charts stay visible for growth/spend answers */}
+      {table.columns?.length > 0 && (
+        <EvidenceChart
+          evidence={{ columns: table.columns, rows }}
+          userQuestion={userQuestion}
+        />
+      )}
+
+      <button
+        type="button"
+        className={`evidence-toggle ${open ? "open" : ""}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span className="evidence-toggle-chevron">{open ? "▾" : "▸"}</span>
+        <span className="evidence-toggle-label">
+          {open ? "Hide" : "View"} evidence & SQL
+        </span>
+        <span className="evidence-toggle-meta">
+          {rowCount} row{rowCount === 1 ? "" : "s"}
+          {table.sql ? " · SQL available" : ""}
+        </span>
+      </button>
+
+      {open && (
+        <div className="evidence-dropdown">
+          <div className="evidence-header">
+            <div className="evidence-title">{title}</div>
+            {table.columns?.length > 0 && (
+              <ExportButtons columns={table.columns} rows={rows} />
+            )}
+          </div>
+          {table.sql && (
+            <div className="evidence-sql-wrap">
+              <div className="evidence-sql-label">SQL query</div>
+              <pre className="evidence-sql">{table.sql}</pre>
+            </div>
+          )}
+          {table.columns?.length > 0 && (
+            <div className="evidence-table-wrap">
+              <table className="evidence-table">
+                <thead>
+                  <tr>
+                    {table.columns.map((col) => (
+                      <th key={col}>{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, 50).map((row, idx) => {
+                    const isAnom = anomIdx >= 0 && Boolean(row[anomIdx]);
+                    return (
+                      <tr key={idx} className={isAnom ? "row-anomaly" : undefined}>
+                        {row.map((cell, cIdx) => {
+                          let display = cell === null ? "—" : String(cell);
+                          if (cIdx === momIdx && cell != null && cell !== "") {
+                            const n = Number(cell);
+                            if (!Number.isNaN(n)) {
+                              display = `${n > 0 ? "+" : ""}${n}%`;
+                            }
+                          }
+                          if (cIdx === anomIdx) {
+                            display = cell ? "⚠ anomaly" : "ok";
+                          }
+                          return <td key={cIdx}>{display}</td>;
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {table.columns?.length > 0 && (
+            <ExportButtons columns={table.columns} rows={rows} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClarificationChips({ choices, onSelect, disabled }) {
+  if (!choices?.length) return null;
+  return (
+    <div className="clarify-block">
+      <div className="clarify-title">Select an account</div>
+      <div className="clarify-chips">
+        {choices.map((choice) => (
+          <button
+            key={choice.id}
+            type="button"
+            className="clarify-chip"
+            disabled={disabled}
+            onClick={() => onSelect(choice)}
+          >
+            {choice.label}
+          </button>
+        ))}
       </div>
-      {table.sql && <pre className="evidence-sql">{table.sql}</pre>}
-      <EvidenceChart
-        evidence={{ columns: table.columns, rows }}
-        userQuestion={userQuestion}
-      />
-      <div className="evidence-table-wrap">
-        <table className="evidence-table">
-          <thead>
-            <tr>
-              {table.columns.map((col) => (
-                <th key={col}>{col}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.slice(0, 50).map((row, idx) => (
-              <tr key={idx}>
-                {row.map((cell, cIdx) => (
-                  <td key={cIdx}>{cell === null ? "—" : String(cell)}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    </div>
+  );
+}
+
+function InsightCallouts({ insights }) {
+  if (!insights?.length) return null;
+  const anomalies = insights.filter((i) => i.type === "anomaly" || i.type === "month" || i.type === "transaction");
+  const moms = insights.filter((i) => i.type === "mom");
+  const shown = [...anomalies.slice(0, 4), ...moms.slice(0, 3)];
+  if (!shown.length) {
+    return (
+      <div className="insight-block">
+        {insights.slice(0, 5).map((i, idx) => (
+          <div key={idx} className={`insight-item insight-${i.type || "info"}`}>
+            {i.message}
+          </div>
+        ))}
       </div>
-      <ExportButtons columns={table.columns} rows={rows} />
+    );
+  }
+  return (
+    <div className="insight-block">
+      {shown.map((i, idx) => (
+        <div
+          key={idx}
+          className={`insight-item ${
+            i.type === "mom" ? "insight-mom" : "insight-anomaly"
+          }`}
+        >
+          {i.message}
+        </div>
+      ))}
     </div>
   );
 }
@@ -199,13 +314,11 @@ function ChatMessage({
   children,
   onThumbsUp,
   onThumbsDown,
+  onChooseAccount,
   feedbackDisabled,
 }) {
   const isUser = message?.role === "user";
   const text = typeof message?.text === "string" ? message.text : "";
-  const hasStructuredTable =
-    Boolean(message?.evidence?.columns?.length) ||
-    Boolean(parseMarkdownTable(text));
 
   return (
     <div
@@ -213,7 +326,12 @@ function ChatMessage({
         isUser ? "chat-message user-message" : "chat-message assistant-message"
       }
     >
-      <div className="chat-message-avatar">{isUser ? "You" : "✦"}</div>
+      <div
+        className={`chat-message-avatar ${isUser ? "avatar-user" : "avatar-assistant"}`}
+        aria-hidden="true"
+      >
+        {isUser ? "You" : <TbxLogo size={32} />}
+      </div>
 
       <div className="chat-message-content">
         {children ? (
@@ -228,12 +346,17 @@ function ChatMessage({
             {text && (
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
             )}
+            <ClarificationChips
+              choices={message?.choices}
+              disabled={feedbackDisabled}
+              onSelect={onChooseAccount}
+            />
+            <InsightCallouts insights={message?.insights} />
             <EvidenceBlock
               evidence={message?.evidence}
               userQuestion={message?.userQuestion}
               answerText={text}
             />
-            {!hasStructuredTable && null}
             {(message?.status || message?.confidence) && (
               <div className="chat-meta">
                 {message.status && <span>status: {message.status}</span>}

@@ -64,6 +64,17 @@ class FeedbackRequest(BaseModel):
     optimize_for: Literal["cost", "balanced", "intelligence"] | None = None
 
 
+class ClarificationChoice(BaseModel):
+    id: str
+    label: str
+    follow_up: str
+
+
+class InsightCallout(BaseModel):
+    type: str = "info"
+    message: str
+
+
 class EvidenceTable(BaseModel):
     columns: list[str] = Field(default_factory=list)
     rows: list[list[Any]] = Field(default_factory=list)
@@ -91,6 +102,8 @@ class ChatResponse(BaseModel):
     status: Literal["answered", "needs_clarification", "insufficient_data"] = "answered"
     optimize_for: Literal["cost", "balanced", "intelligence"] | None = None
     retried: bool = False
+    choices: list[ClarificationChoice] = Field(default_factory=list)
+    insights: list[InsightCallout] = Field(default_factory=list)
 
 
 class ChatHistoryMessage(BaseModel):
