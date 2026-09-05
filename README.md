@@ -213,11 +213,3 @@ TBX_hackathon/
 └── README.md
 ```
 
----
-
-## Notes
-
-- Answers must stay grounded in the provided schema only — no fabricated figures.
-- Account numbers are masked in user-facing replies; UTRs are not echoed in full.
-- In PostgreSQL, always quote the table name: `"transaction"`.
-\n
