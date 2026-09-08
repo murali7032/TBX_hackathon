@@ -5,18 +5,10 @@ import ChatMessage from "../components/chat/ChatMessage";
 import ChatInput from "../components/chat/ChatInput";
 import SuggestedQuestion from "../components/chat/SuggestedQuestion";
 import TbxLogo from "../components/TbxLogo";
+import { backendUrl, fetchWithTimeout, API_TIMEOUT_MS } from "../api";
 
-const backendUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-
-const fetchWithTimeout = async (url, options = {}, timeout = 120000) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(timeoutId);
-  }
-};
+const fetchChat = (path, options) =>
+  fetchWithTimeout(`${backendUrl}${path}`, options, API_TIMEOUT_MS);
 
 function findLastUserQuestion(messages, beforeIndex) {
   for (let i = beforeIndex - 1; i >= 0; i -= 1) {
@@ -91,9 +83,7 @@ function Chat() {
     setLoading(true);
 
     try {
-      const response = await fetchWithTimeout(
-        `${backendUrl}/chat`,
-        {
+      const response = await fetchChat("/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -101,9 +91,7 @@ function Chat() {
             session_id: sessionId,
             optimize_for: optimizeFor,
           }),
-        },
-        120000
-      );
+        });
 
       if (!response.ok) {
         const detail = await response.text();
@@ -138,7 +126,7 @@ function Chat() {
       prev.map((m, i) => (i === index ? { ...m, feedback: "up" } : m))
     );
     try {
-      await fetch(`${backendUrl}/chat/feedback`, {
+      await fetchChat("/chat/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -165,9 +153,7 @@ function Chat() {
     setLoading(true);
 
     try {
-      const response = await fetchWithTimeout(
-        `${backendUrl}/chat/feedback`,
-        {
+      const response = await fetchChat("/chat/feedback", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -178,9 +164,7 @@ function Chat() {
             previous_answer: msg.text || null,
             optimize_for: optimizeFor,
           }),
-        },
-        120000
-      );
+        });
 
       if (!response.ok) {
         const detail = await response.text();

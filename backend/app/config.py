@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     )
 
     database_url: str = (
-        "postgresql+psycopg2://finance_user:finance_password@127.0.0.1:5432/finance"
+        "mysql+pymysql://tiby:tiby@10.20.16.135:29047/tiby_hackathon"
     )
     app_name: str = "TBX Finance Assistant API"
     cors_origins: list[str] = ["*"]
@@ -37,7 +37,12 @@ class Settings(BaseSettings):
 
     max_tool_rounds: int = 5
     sql_row_limit: int = 200
-    sql_timeout_ms: int = 5000
+    # MySQL MAX_EXECUTION_TIME for read-only queries (ms). Large ledgers need headroom.
+    sql_timeout_ms: int = 180000
+    # Gemini HTTP client timeout (ms) — covers multi-round tool + generation loops.
+    gemini_http_timeout_ms: int = 300000
+    # MySQL TCP connect timeout (seconds)
+    db_connect_timeout_sec: int = 30
     guide_max_chars: int = 12000
 
 

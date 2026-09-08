@@ -51,9 +51,8 @@ class Transaction(Base):
     transaction_type: Mapped[TransactionType] = mapped_column(
         Enum(
             TransactionType,
-            name="transaction_type_enum",
             values_callable=lambda enum_cls: [member.value for member in enum_cls],
-            create_type=False,
+            native_enum=True,
         ),
         nullable=False,
     )

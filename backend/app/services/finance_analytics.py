@@ -1,7 +1,8 @@
-"""Deterministic finance analytics helpers for the chat agent."""
+"""Deterministic finance analytics helpers for the chat agent (MySQL)."""
 
 from __future__ import annotations
 
+from statistics import median
 from typing import Any
 
 from sqlalchemy import text
@@ -32,7 +33,7 @@ def find_accounts(
         params["bank_code"] = bank_code.strip().upper()
 
     if account_number:
-        clauses.append("account_number ILIKE :account_number")
+        clauses.append("account_number LIKE :account_number")
         params["account_number"] = f"%{account_number.strip()}%"
 
     if not clauses:
@@ -88,12 +89,13 @@ def find_accounts(
 DEBIT_MOM_SQL = """
 WITH monthly AS (
   SELECT
-    date_trunc('month', transaction_date)::date AS month,
-    COUNT(*)::int AS txn_count,
-    SUM(transaction_amount)::numeric AS total_debit
-  FROM "transaction"
+    DATE_FORMAT(transaction_date, '%Y-%m-01') AS month,
+    COUNT(*) AS txn_count,
+    SUM(transaction_amount) AS total_debit
+  FROM `transaction`
   WHERE transaction_type = 'debit'
-  GROUP BY 1
+    AND transaction_date >= DATE_SUB(CURDATE(), INTERVAL 36 MONTH)
+  GROUP BY DATE_FORMAT(transaction_date, '%Y-%m-01')
 ),
 with_lag AS (
   SELECT
@@ -109,56 +111,30 @@ with_lag AS (
       2
     ) AS mom_pct_change
   FROM monthly
-),
-stats AS (
-  SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY total_debit) AS median_debit
-  FROM monthly
 )
 SELECT
-  w.month,
-  w.txn_count,
-  w.total_debit,
-  w.prev_month_debit,
-  w.mom_pct_change,
-  ROUND(s.median_debit::numeric, 2) AS median_monthly_debit,
-  CASE
-    WHEN w.total_debit > 2 * s.median_debit THEN true
-    ELSE false
-  END AS is_anomaly
-FROM with_lag w
-CROSS JOIN stats s
-ORDER BY w.month
+  month,
+  txn_count,
+  total_debit,
+  prev_month_debit,
+  mom_pct_change
+FROM with_lag
+ORDER BY month
 """
 
 
 DEBIT_TXN_ANOMALY_SQL = """
-WITH debits AS (
-  SELECT
-    transaction_id,
-    account_id,
-    transaction_date,
-    transaction_amount,
-    LEFT(COALESCE(description, ''), 80) AS description
-  FROM "transaction"
-  WHERE transaction_type = 'debit'
-),
-stats AS (
-  SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY transaction_amount) AS median_amt
-  FROM debits
-)
 SELECT
-  d.transaction_id,
-  d.account_id,
-  d.transaction_date,
-  d.transaction_amount,
-  d.description,
-  ROUND(s.median_amt::numeric, 2) AS median_debit,
-  ROUND((d.transaction_amount / NULLIF(s.median_amt, 0))::numeric, 2) AS vs_median_x
-FROM debits d
-CROSS JOIN stats s
-WHERE d.transaction_amount > 2 * s.median_amt
-ORDER BY d.transaction_amount DESC
-LIMIT 10
+  transaction_id,
+  account_id,
+  transaction_date,
+  transaction_amount,
+  LEFT(COALESCE(description, ''), 80) AS description
+FROM `transaction`
+WHERE transaction_type = 'debit'
+  AND transaction_date >= DATE_SUB(CURDATE(), INTERVAL 36 MONTH)
+ORDER BY transaction_amount DESC
+LIMIT 50
 """
 
 
@@ -174,6 +150,13 @@ def analyze_debit_trends(db: Session) -> dict[str, Any]:
         "median_monthly_debit",
         "is_anomaly",
     ]
+    totals = [
+        float(r.total_debit)
+        for r in month_rows
+        if r.total_debit is not None
+    ]
+    median_monthly = float(median(totals)) if totals else None
+
     rows: list[list[Any]] = []
     insights: list[str] = []
     anomalies: list[dict[str, Any]] = []
@@ -183,19 +166,33 @@ def analyze_debit_trends(db: Session) -> dict[str, Any]:
         total = float(r.total_debit) if r.total_debit is not None else None
         prev = float(r.prev_month_debit) if r.prev_month_debit is not None else None
         mom = float(r.mom_pct_change) if r.mom_pct_change is not None else None
-        median = float(r.median_monthly_debit) if r.median_monthly_debit is not None else None
-        is_anom = bool(r.is_anomaly)
-        rows.append([month, int(r.txn_count), total, prev, mom, median, is_anom])
-        if is_anom and total is not None and median is not None:
+        is_anom = bool(
+            total is not None
+            and median_monthly is not None
+            and median_monthly > 0
+            and total > 2 * median_monthly
+        )
+        rows.append(
+            [
+                month,
+                int(r.txn_count),
+                total,
+                prev,
+                mom,
+                round(median_monthly, 2) if median_monthly is not None else None,
+                is_anom,
+            ]
+        )
+        if is_anom and total is not None and median_monthly is not None:
             anomalies.append(
                 {
                     "type": "month",
                     "month": month,
                     "total_debit": total,
-                    "median": median,
+                    "median": median_monthly,
                     "message": (
                         f"Anomaly: {month} debits ₹{total:,.2f} are > 2× "
-                        f"median monthly debit ₹{median:,.2f}."
+                        f"median monthly debit ₹{median_monthly:,.2f}."
                     ),
                 }
             )
@@ -206,30 +203,39 @@ def analyze_debit_trends(db: Session) -> dict[str, Any]:
                 f"{month}: MoM debit change {mom:+.2f}% ({direction}) vs prior month."
             )
 
-    txn_anom = db.execute(text(DEBIT_TXN_ANOMALY_SQL)).fetchall()
+    txn_rows = db.execute(text(DEBIT_TXN_ANOMALY_SQL)).fetchall()
+    amounts = [float(t.transaction_amount) for t in txn_rows if t.transaction_amount is not None]
+    median_txn = float(median(amounts)) if amounts else None
     txn_anomalies = []
-    for t in txn_anom:
-        msg = (
-            f"Large txn {t.transaction_id[:8]}… amount ₹{float(t.transaction_amount):,.2f} "
-            f"is {float(t.vs_median_x):.1f}× median debit ₹{float(t.median_debit):,.2f}."
-        )
-        txn_anomalies.append(
-            {
-                "type": "transaction",
-                "transaction_id": t.transaction_id,
-                "amount": float(t.transaction_amount),
-                "vs_median_x": float(t.vs_median_x),
-                "message": msg,
-            }
-        )
-        insights.append(msg)
+    if median_txn and median_txn > 0:
+        for t in txn_rows:
+            amount = float(t.transaction_amount)
+            if amount <= 2 * median_txn:
+                continue
+            vs = round(amount / median_txn, 2)
+            msg = (
+                f"Large txn {t.transaction_id[:8]}… amount ₹{amount:,.2f} "
+                f"is {vs:.1f}× median debit ₹{median_txn:,.2f}."
+            )
+            txn_anomalies.append(
+                {
+                    "type": "transaction",
+                    "transaction_id": t.transaction_id,
+                    "amount": amount,
+                    "vs_median_x": vs,
+                    "message": msg,
+                }
+            )
+            insights.append(msg)
+            if len(txn_anomalies) >= 10:
+                break
 
     return {
         "columns": columns,
         "rows": rows,
         "sql": DEBIT_MOM_SQL.strip(),
         "anomalies": anomalies + txn_anomalies,
-        "insights": insights[-12:],  # keep prompt compact
+        "insights": insights[-12:],
         "summary": {
             "months": len(rows),
             "anomaly_months": sum(1 for row in rows if row[6]),

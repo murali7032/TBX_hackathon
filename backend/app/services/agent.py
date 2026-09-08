@@ -37,15 +37,21 @@ OPTIMIZE_FOR_MODELS = {
 }
 
 SYSTEM_INSTRUCTION = """
-You are a finance assistant for a hackathon PostgreSQL database with exactly three tables:
-bank, account, and "transaction" (always quote "transaction" in SQL).
+You are a finance assistant for a hackathon MySQL database with exactly three tables:
+bank, account, and `transaction` (always backtick `transaction` in SQL — it is reserved).
 
 SCHEMA (exact column names — do not invent columns like amount):
 - bank(bank_code, bank_name)
 - account(account_id, entity_id, account_number, program_id, available_balance, bank_code)
-- "transaction"(transaction_id, account_id, transaction_date, transaction_type, description,
+- `transaction`(transaction_id, account_id, transaction_date, transaction_type, description,
   transaction_amount, transaction_reference_id, utr_number)
-- transaction_type is only 'credit' or 'debit' (use = 'debit', not ILIKE)
+- transaction_type is only 'credit' or 'debit' (use = 'debit' / = 'credit' with equality, not LIKE)
+
+MySQL dialect rules:
+- Use backticks for reserved names: FROM `transaction`
+- Use LIKE (not ILIKE). Prefer DATE_FORMAT(col, '%Y-%m-01') for month buckets.
+- Do not use Postgres-only syntax (date_trunc, ::casts, PERCENTILE_CONT, ILIKE, || for concat).
+- String concat: use CONCAT('%', 'word', '%') or write literals like '%SELECTION%'.
 
 IMPORTANT RULES:
 1. Never invent financial numbers, banks, accounts, or transactions.
@@ -58,10 +64,33 @@ IMPORTANT RULES:
 5. Ambiguity: if find_accounts returns match_count > 1, DO NOT pick an account.
    Tell the user to choose one option and end with STATUS: needs_clarification.
 6. Mask account_number (last 4 only). Do not dump full utr_number.
-7. Bare "reference" / "ref no" → transaction_reference_id. "UTR" → utr_number.
-8. "Vendor" questions: no vendor table — search description; if empty, say so.
-9. "Unreconciled": no reconciliation column — say data is not available.
-10. For growth/spend questions, prefer analyze_debit_trends (includes MoM % and anomaly flags).
+7. Bare "reference" / "ref no" → transaction_reference_id (exact first, then LIKE '%ref%').
+   "UTR" → utr_number.
+8. "Unreconciled": no reconciliation column — say data is not available.
+9. For growth/spend questions, prefer analyze_debit_trends (includes MoM % and anomaly flags).
+
+DESCRIPTION / SIMILAR-WORD MATCHING (critical):
+- There is NO vendor/merchant table. Payee, merchant, vendor, store, shop, brand, and
+  narration text live only in `transaction`.description.
+- When the user asks about a name, category, rail, or similar wording, ALWAYS search with
+  MySQL LIKE on description — never require an exact full-string match.
+- Expand the user's phrasing into related tokens and OR them, for example:
+  - "Selection" / "Selection Mobile" → '%SELECTION%' OR '%SELECTRICITY%' OR '%NAVYUG SELECTION%'
+  - "UPI payments" → description LIKE '%UPI%'
+  - "NEFT" / "bank transfer" → '%NEFT%' OR '%FT -%' OR '%IMPS%'
+  - "Reliance" / "digital retail" → '%RELIANCE%' OR '%RELIANCEDIGITAL%'
+  - Partial / misspelled names → use the distinctive stem with wildcards: LIKE '%STEM%'
+- Prefer case patterns that appear in this dataset (often UPPERCASE merchant text), but
+  MySQL LIKE is case-insensitive on typical collations — still use clear tokens.
+- Good pattern:
+  SELECT ... FROM `transaction`
+  WHERE (description LIKE '%TOKEN1%' OR description LIKE '%TOKEN2%')
+    AND transaction_type = 'debit'   -- if they asked about spend/payments
+  ORDER BY transaction_date DESC
+  LIMIT 50;
+- If the first keyword returns 0 rows, broaden with related stems (one more LIKE query),
+  then report insufficient_data if still empty. Do not invent matches.
+- For totals ("how much to X"), SUM(transaction_amount) with the same LIKE filters.
 
 Final reply format: short grounded answer. Mention MoM % and anomalies when present.
 Optionally end with:
@@ -121,8 +150,10 @@ TOOL_DECLARATIONS = [
     types.FunctionDeclaration(
         name="run_sql_query",
         description=(
-            "Run a single read-only PostgreSQL SELECT/WITH query against the finance DB. "
-            'Quote the transaction table as "transaction".'
+            "Run a single read-only MySQL SELECT/WITH query against the finance DB. "
+            "Quote the transaction table as `transaction`. "
+            "For vendor/merchant/payee/narration questions, filter description with "
+            "LIKE '%token%' and OR related similar words — never require exact description equality."
         ),
         parameters_json_schema={
             "type": "object",
@@ -164,7 +195,12 @@ def _gemini_client() -> genai.Client:
             "GEMINI_API_KEY is missing. Add it to backend/.env "
             "(https://aistudio.google.com/apikey)."
         )
-    return genai.Client(api_key=settings.gemini_api_key)
+    return genai.Client(
+        api_key=settings.gemini_api_key,
+        http_options=types.HttpOptions(
+            timeout=int(settings.gemini_http_timeout_ms),
+        ),
+    )
 
 
 def _parse_status_confidence(answer: str) -> tuple[str, str, str]:

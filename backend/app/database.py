@@ -11,6 +11,7 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=10,
+    connect_args={"connect_timeout": int(settings.db_connect_timeout_sec)},
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

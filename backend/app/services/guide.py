@@ -20,9 +20,9 @@ def load_database_guide(*, max_chars: int | None = None) -> str:
         return (
             "Guide file not found. Schema: bank(bank_code, bank_name); "
             "account(account_id, entity_id, account_number, program_id, available_balance, bank_code); "
-            'transaction(transaction_id, account_id, transaction_date, transaction_type, description, '
+            "transaction(transaction_id, account_id, transaction_date, transaction_type, description, "
             "transaction_amount, transaction_reference_id, utr_number). "
-            'Always quote "transaction" in PostgreSQL.'
+            "Always backtick `transaction` in MySQL."
         )
     text_body = path.read_text(encoding="utf-8")
     limit = max_chars if max_chars is not None else settings.guide_max_chars
@@ -37,14 +37,14 @@ def list_schema_summary(db: Session) -> str:
             """
             SELECT table_name, column_name, data_type, is_nullable
             FROM information_schema.columns
-            WHERE table_schema = 'public'
+            WHERE table_schema = DATABASE()
               AND table_name IN ('bank', 'account', 'transaction')
             ORDER BY table_name, ordinal_position
             """
         )
     ).fetchall()
     if not rows:
-        return "No public tables found for bank/account/transaction."
+        return "No tables found for bank/account/transaction in the current database."
     lines = ["table | column | type | nullable"]
     for table_name, column_name, data_type, is_nullable in rows:
         lines.append(f"{table_name} | {column_name} | {data_type} | {is_nullable}")

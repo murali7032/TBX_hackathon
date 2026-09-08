@@ -2,9 +2,9 @@
 
 Grounded finance assistant for **TBX Finance** (BVP Tech Catalyst Hackathon).
 
-Ask plain-language questions about banks, accounts, and transactions. Every number comes from PostgreSQL via read-only SQL tools — the model explains results; it does not invent them.
+Ask plain-language questions about banks, accounts, and transactions. Every number comes from MySQL via read-only SQL tools — the model explains results; it does not invent them.
 
-**Stack:** React (Vite) · FastAPI · PostgreSQL · Google Gemini (Flash / Flash-Lite)
+**Stack:** React (Vite) · FastAPI · MySQL · Google Gemini (Flash / Flash-Lite)
 
 ---
 
@@ -20,11 +20,11 @@ Ask plain-language questions about banks, accounts, and transactions. Every numb
                                        │ SQLAlchemy                       │ read-only
                                        ▼                                  │ SELECT/WITH
                               ┌─────────────────┐                         │
-                              │  PostgreSQL 18  │ ◄───────────────────────┘
-                              │  finance DB     │
+                              │  MySQL          │ ◄───────────────────────┘
+                              │  tiby_hackathon │
                               │  bank           │
                               │  account        │
-                              │  "transaction"  │
+                              │  `transaction`  │
                               └─────────────────┘
 ```
 
@@ -35,7 +35,7 @@ Ask plain-language questions about banks, accounts, and transactions. Every numb
 1. **Ask** — User sends a natural-language question (`optimize_for` optional).
 2. **Clarify** — Ambiguous bank / last-4 → account choice chips.
 3. **Plan** — Gemini picks tools using the schema guide.
-4. **Query** — Read-only SQL against Postgres.
+4. **Query** — Read-only SQL against MySQL.
 5. **Evidence** — Result rows + SQL kept for the UI.
 6. **Answer** — Plain-language reply narrated only from those rows.
 
@@ -67,7 +67,7 @@ Ask plain-language questions about banks, accounts, and transactions. Every numb
 
 - Python **3.11+**
 - Node.js **18+** and npm
-- Network access to the Postgres host (or your own Postgres with the seed loaded)
+- Network access to the MySQL host
 - A **Google Gemini API key**
 
 
@@ -83,28 +83,17 @@ cd TBX_hackathon
 
 ### 2. Database
 
-Demo connection (remote EC2 Postgres):
+Remote MySQL:
 
+| Setting  | Value            |
+| -------- | ---------------- |
+| Host     | `10.20.16.135`   |
+| Port     | `29047`          |
+| Database | `tiby_hackathon` |
+| User     | `tiby`           |
+| Password | `tiby`           |
 
-| Setting  | Value              |
-| -------- | ------------------ |
-| Host     | `192.174.40.108`   |
-| Port     | `5432`             |
-| Database | `finance`          |
-| User     | `finance_user`     |
-| Password | `finance_password` |
-
-
-Schema and seed notes: `[database/dataset](database/dataset)` · tool guide: `[database/LLM_TOOL_GUIDE.md](database/LLM_TOOL_GUIDE.md)`
-
-Optional local Postgres via Docker:
-
-```powershell
-cd database
-docker compose up -d
-```
-
-Update `DATABASE_URL` in `backend/.env` if you use local Docker instead of the remote host.
+Schema notes: [`database/dataset`](database/dataset) · tool guide: [`database/LLM_TOOL_GUIDE.md`](database/LLM_TOOL_GUIDE.md) · DDL: [`database/schema.sql`](database/schema.sql)
 
 ### 3. Backend
 
@@ -119,7 +108,7 @@ copy .env.example .env
 Edit `backend/.env`:
 
 ```env
-DATABASE_URL=postgresql+psycopg2://finance_user:finance_password@50.17.70.100:5432/finance
+DATABASE_URL=mysql+pymysql://tiby:tiby@10.20.16.135:29047/tiby_hackathon
 GEMINI_API_KEY=your_key_here
 GEMINI_OPTIMIZE_FOR=balanced
 DATABASE_GUIDE_PATH=../database/LLM_TOOL_GUIDE.md
@@ -131,7 +120,7 @@ DATABASE_GUIDE_PATH=../database/LLM_TOOL_GUIDE.md
 | `GEMINI_API_KEY`      | Required for `/chat`                        |
 | `GEMINI_OPTIMIZE_FOR` | `cost` | `balanced` | `intelligence`        |
 | `GEMINI_MODEL`        | Optional fixed model id (overrides mapping) |
-| `DATABASE_URL`        | SQLAlchemy Postgres URL                     |
+| `DATABASE_URL`        | SQLAlchemy MySQL URL                     |
 | `DATABASE_GUIDE_PATH` | Path to the LLM schema guide                |
 
 
