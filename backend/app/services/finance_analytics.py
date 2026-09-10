@@ -2,11 +2,183 @@
 
 from __future__ import annotations
 
+import re
+from datetime import date, datetime, timedelta
 from statistics import median
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+PeriodName = Literal["this_month", "last_month", "last_30_days", "all"]
+TxnTypeFilter = Literal["debit", "credit", "all"]
+
+# Short stems that match rail noise inside narrations (e.g. NET → INET).
+_BLOCKED_SHORT_TOKENS = frozenset({"NET", "FLI", "INE", "IMP", "NEF"})
+
+
+def _sanitize_keywords(keywords: list[str] | None, *, min_len: int = 4) -> list[str]:
+    """Uppercase, dedupe, drop stems shorter than min_len (stops NET→INET)."""
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for raw in keywords or []:
+        token = re.sub(r"[^A-Za-z0-9]+", "", str(raw).strip()).upper()
+        if not token or token in seen:
+            continue
+        if len(token) < min_len:
+            continue
+        if token in _BLOCKED_SHORT_TOKENS and len(token) < 5:
+            continue
+        seen.add(token)
+        cleaned.append(token)
+    return cleaned
+
+
+def _period_bounds(period: str) -> tuple[datetime | None, datetime | None, str]:
+    """Return [start, end) datetime bounds and a label. end is exclusive."""
+    today = date.today()
+    p = (period or "this_month").strip().lower()
+    if p == "all":
+        return None, None, "all"
+    if p == "last_30_days":
+        start = datetime.combine(today - timedelta(days=30), datetime.min.time())
+        end = datetime.combine(today + timedelta(days=1), datetime.min.time())
+        return start, end, "last_30_days"
+    if p == "last_month":
+        first_this = today.replace(day=1)
+        last_month_end = first_this
+        if first_this.month == 1:
+            last_month_start = first_this.replace(year=first_this.year - 1, month=12)
+        else:
+            last_month_start = first_this.replace(month=first_this.month - 1)
+        return (
+            datetime.combine(last_month_start, datetime.min.time()),
+            datetime.combine(last_month_end, datetime.min.time()),
+            "last_month",
+        )
+    # this_month (default)
+    start_d = today.replace(day=1)
+    if start_d.month == 12:
+        end_d = start_d.replace(year=start_d.year + 1, month=1)
+    else:
+        end_d = start_d.replace(month=start_d.month + 1)
+    return (
+        datetime.combine(start_d, datetime.min.time()),
+        datetime.combine(end_d, datetime.min.time()),
+        "this_month",
+    )
+
+
+def summarize_merchant_spend(
+    db: Session,
+    *,
+    keywords: list[str] | None = None,
+    period: PeriodName | str = "this_month",
+    transaction_type: TxnTypeFilter | str = "debit",
+) -> dict[str, Any]:
+    """Aggregate COUNT/SUM for merchant-like description matches in a date window."""
+    tokens = _sanitize_keywords(keywords)
+    if not tokens:
+        return {
+            "error": (
+                "Provide keywords of at least 4 alphanumeric characters "
+                "(e.g. NETFLIX, not NET). Short stems match rail noise like INET."
+            ),
+            "columns": [],
+            "rows": [],
+            "sql": None,
+        }
+
+    start, end, period_label = _period_bounds(str(period))
+    type_filter = (transaction_type or "debit").strip().lower()
+    if type_filter not in {"debit", "credit", "all"}:
+        type_filter = "debit"
+
+    clauses: list[str] = []
+    params: dict[str, Any] = {}
+
+    if type_filter != "all":
+        clauses.append("transaction_type = :txn_type")
+        params["txn_type"] = type_filter
+
+    if start is not None and end is not None:
+        clauses.append("transaction_date >= :start_ts")
+        clauses.append("transaction_date < :end_ts")
+        params["start_ts"] = start
+        params["end_ts"] = end
+
+    like_parts: list[str] = []
+    for i, token in enumerate(tokens):
+        key = f"kw{i}"
+        like_parts.append(f"description LIKE :{key}")
+        params[key] = f"%{token}%"
+    clauses.append("(" + " OR ".join(like_parts) + ")")
+
+    where = " AND ".join(clauses)
+    sql = f"""
+SELECT
+  COUNT(*) AS txn_count,
+  COALESCE(SUM(transaction_amount), 0) AS total_amount,
+  MIN(transaction_date) AS first_txn,
+  MAX(transaction_date) AS last_txn
+FROM `transaction`
+WHERE {where}
+""".strip()
+
+    row = db.execute(text(sql), params).fetchone()
+    txn_count = int(row.txn_count) if row and row.txn_count is not None else 0
+    total = float(row.total_amount) if row and row.total_amount is not None else 0.0
+    first_txn = (
+        row.first_txn.isoformat()
+        if row and row.first_txn is not None and hasattr(row.first_txn, "isoformat")
+        else (str(row.first_txn) if row and row.first_txn is not None else None)
+    )
+    last_txn = (
+        row.last_txn.isoformat()
+        if row and row.last_txn is not None and hasattr(row.last_txn, "isoformat")
+        else (str(row.last_txn) if row and row.last_txn is not None else None)
+    )
+
+    columns = [
+        "txn_count",
+        "total_amount",
+        "first_txn",
+        "last_txn",
+        "period",
+        "transaction_type",
+        "keywords",
+    ]
+    rows = [
+        [
+            txn_count,
+            round(total, 2),
+            first_txn,
+            last_txn,
+            period_label,
+            type_filter,
+            ", ".join(tokens),
+        ]
+    ]
+
+    return {
+        "columns": columns,
+        "rows": rows,
+        "sql": sql,
+        "summary": {
+            "txn_count": txn_count,
+            "total_amount": round(total, 2),
+            "period": period_label,
+            "transaction_type": type_filter,
+            "keywords": tokens,
+            "start": start.isoformat() if start else None,
+            "end": end.isoformat() if end else None,
+        },
+        "hint": (
+            None
+            if txn_count > 0
+            else "No matching transactions in this period. Try broader keywords (still ≥4 chars) or period=all."
+        ),
+    }
 
 
 def find_accounts(

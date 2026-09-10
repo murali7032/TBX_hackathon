@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
 from typing import Any
 
 from google import genai
@@ -15,16 +17,38 @@ from app.schemas import (
     ClarificationChoice,
     EvidenceTable,
     InsightCallout,
+    LatencyBreakdown,
+    LatencyRound,
     ToolTraceItem,
 )
 from app.services.finance_analytics import (
     analyze_debit_trends,
     find_accounts,
     matches_to_choices,
+    summarize_merchant_spend,
 )
 from app.services.guide import list_schema_summary, load_database_guide
 from app.services.sessions import ChatSession, session_store
 from app.services.sql_guard import SqlValidationError, execute_readonly_sql
+
+logger = logging.getLogger(__name__)
+
+_SQL_TOOLS = frozenset(
+    {"run_sql_query", "summarize_merchant_spend", "analyze_debit_trends"}
+)
+
+
+def _ms_since(start: float) -> float:
+    return round((time.perf_counter() - start) * 1000, 1)
+
+
+def _new_latency_holder() -> dict[str, Any]:
+    return {
+        "llm_ms": 0.0,
+        "sql_ms": 0.0,
+        "tool_ms": 0.0,
+        "rounds": [],
+    }
 
 
 OPTIMIZE_FOR_VALUES = frozenset({"cost", "balanced", "intelligence"})
@@ -59,7 +83,8 @@ IMPORTANT RULES:
 3. Prefer dedicated tools when they fit:
    - find_accounts: when user gives last-4 digits / partial account / bank+account ambiguity
    - analyze_debit_trends: for spend growth, MoM change, increasing/decreasing, anomalies
-   - run_sql_query: for other targeted SELECT/WITH queries
+   - summarize_merchant_spend: for "how much / spent / paid / total to merchant X" (required)
+   - run_sql_query: for other targeted SELECT/WITH queries (row samples, refs, balances)
 4. Prefer 1–2 tool calls. STOP and answer as soon as you have enough data.
 5. Ambiguity: if find_accounts returns match_count > 1, DO NOT pick an account.
    Tell the user to choose one option and end with STATUS: needs_clarification.
@@ -67,30 +92,29 @@ IMPORTANT RULES:
 7. Bare "reference" / "ref no" → transaction_reference_id (exact first, then LIKE '%ref%').
    "UTR" → utr_number.
 8. "Unreconciled": no reconciliation column — say data is not available.
-9. For growth/spend questions, prefer analyze_debit_trends (includes MoM % and anomaly flags).
+9. For growth/MoM/anomaly questions, prefer analyze_debit_trends.
 
-DESCRIPTION / SIMILAR-WORD MATCHING (critical):
-- There is NO vendor/merchant table. Payee, merchant, vendor, store, shop, brand, and
-  narration text live only in `transaction`.description.
-- When the user asks about a name, category, rail, or similar wording, ALWAYS search with
-  MySQL LIKE on description — never require an exact full-string match.
-- Expand the user's phrasing into related tokens and OR them, for example:
-  - "Selection" / "Selection Mobile" → '%SELECTION%' OR '%SELECTRICITY%' OR '%NAVYUG SELECTION%'
-  - "UPI payments" → description LIKE '%UPI%'
-  - "NEFT" / "bank transfer" → '%NEFT%' OR '%FT -%' OR '%IMPS%'
-  - "Reliance" / "digital retail" → '%RELIANCE%' OR '%RELIANCEDIGITAL%'
-  - Partial / misspelled names → use the distinctive stem with wildcards: LIKE '%STEM%'
-- Prefer case patterns that appear in this dataset (often UPPERCASE merchant text), but
-  MySQL LIKE is case-insensitive on typical collations — still use clear tokens.
-- Good pattern:
-  SELECT ... FROM `transaction`
-  WHERE (description LIKE '%TOKEN1%' OR description LIKE '%TOKEN2%')
-    AND transaction_type = 'debit'   -- if they asked about spend/payments
-  ORDER BY transaction_date DESC
-  LIMIT 50;
-- If the first keyword returns 0 rows, broaden with related stems (one more LIKE query),
-  then report insufficient_data if still empty. Do not invent matches.
-- For totals ("how much to X"), SUM(transaction_amount) with the same LIKE filters.
+SPEND TOTALS / "HOW MUCH" (critical — do not dump rows):
+- For how much / spent / paid / total to a merchant, brand, or payee: ALWAYS call
+  summarize_merchant_spend. Do NOT SELECT * or list transactions to total in prose.
+- Pass full merchant stems (length ≥ 4), e.g. Netflix → keywords=["NETFLIX"] (and optionally
+  "NFLX"). NEVER use short stems like NET, FLI — they match rail noise (INET inside IMPS).
+- Map time phrases to period: "this month"→this_month, "last month"→last_month,
+  "last 30 days"→last_30_days, otherwise all. Default transaction_type=debit for spend.
+- Answer from the single aggregate row (txn_count, total_amount). If txn_count=0, say no match.
+
+DESCRIPTION / SIMILAR-WORD MATCHING (for non-total lookups):
+- There is NO vendor/merchant table. Payee/merchant text lives in `transaction`.description.
+- Use LIKE '%TOKEN%' with tokens ≥ 4 chars. Expand related words with OR when listing samples.
+- Good aggregate pattern (if you must use run_sql_query instead of the tool):
+  SELECT COUNT(*) AS n, COALESCE(SUM(transaction_amount),0) AS total
+  FROM `transaction`
+  WHERE transaction_type = 'debit'
+    AND transaction_date >= :month_start AND transaction_date < :month_end
+    AND (description LIKE '%NETFLIX%');
+- For recent sample rows only (not totals): SELECT … ORDER BY transaction_date DESC LIMIT 20;
+- If the first keyword returns 0 rows, broaden once with related stems (≥4 chars), then
+  report insufficient_data. Do not invent matches.
 
 Final reply format: short grounded answer. Mention MoM % and anomalies when present.
 Optionally end with:
@@ -143,17 +167,48 @@ TOOL_DECLARATIONS = [
         name="analyze_debit_trends",
         description=(
             "Compute monthly debit totals with MoM % change (SQL LAG) and anomaly flags "
-            "(month or txn > 2× median debit). Use for growth/spend/increasing/decreasing questions."
+            "(month or txn > 2× median debit). Use for growth/increasing/decreasing/anomaly questions — "
+            "not for 'how much to merchant X'."
         ),
         parameters_json_schema={"type": "object", "properties": {}},
+    ),
+    types.FunctionDeclaration(
+        name="summarize_merchant_spend",
+        description=(
+            "REQUIRED for how much / spent / paid / total to a merchant or payee. "
+            "Returns COUNT + SUM for description LIKE matches in a date period. "
+            "Pass full stems ≥4 chars (e.g. NETFLIX). Never short stems like NET (matches INET)."
+        ),
+        parameters_json_schema={
+            "type": "object",
+            "properties": {
+                "keywords": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Merchant stems, each ≥4 alphanumeric chars, e.g. ['NETFLIX']",
+                },
+                "period": {
+                    "type": "string",
+                    "enum": ["this_month", "last_month", "last_30_days", "all"],
+                    "description": "Date window; default this_month",
+                },
+                "transaction_type": {
+                    "type": "string",
+                    "enum": ["debit", "credit", "all"],
+                    "description": "Default debit for spend questions",
+                },
+            },
+            "required": ["keywords"],
+        },
     ),
     types.FunctionDeclaration(
         name="run_sql_query",
         description=(
             "Run a single read-only MySQL SELECT/WITH query against the finance DB. "
             "Quote the transaction table as `transaction`. "
-            "For vendor/merchant/payee/narration questions, filter description with "
-            "LIKE '%token%' and OR related similar words — never require exact description equality."
+            "For spend totals / how much to a merchant, prefer summarize_merchant_spend instead. "
+            "If you must aggregate in SQL, use COUNT/SUM — never SELECT * to total in prose. "
+            "For narration samples, filter description with LIKE '%token%' (tokens ≥4 chars)."
         ),
         parameters_json_schema={
             "type": "object",
@@ -246,7 +301,8 @@ def _infer_status(
     sql_traces = [
         t
         for t in tool_trace
-        if t.tool in {"run_sql_query", "analyze_debit_trends"} and t.ok
+        if t.tool in {"run_sql_query", "analyze_debit_trends", "summarize_merchant_spend"}
+        and t.ok
     ]
     if status == "answered" and sql_traces and all((t.row_count or 0) == 0 for t in sql_traces):
         status = "insufficient_data"
@@ -275,23 +331,39 @@ def _dispatch_tool(
     tool_trace: list[ToolTraceItem],
     choices_holder: list[dict[str, str]],
     insights_holder: list[dict[str, str]],
+    latency_holder: dict[str, Any] | None = None,
 ) -> Any:
+    t0 = time.perf_counter()
+    sql_ms = 0.0
+
+    def _finish(item: ToolTraceItem, result: Any) -> Any:
+        item.duration_ms = _ms_since(t0)
+        tool_trace.append(item)
+        if latency_holder is not None:
+            latency_holder["tool_ms"] = round(
+                float(latency_holder.get("tool_ms") or 0) + item.duration_ms, 1
+            )
+            if name in _SQL_TOOLS:
+                # Treat SQL-bound tools as DB time (session open is negligible)
+                add_sql = sql_ms if sql_ms > 0 else item.duration_ms
+                latency_holder["sql_ms"] = round(
+                    float(latency_holder.get("sql_ms") or 0) + add_sql, 1
+                )
+        return result
+
     try:
         if name == "read_database_guide":
             content = load_database_guide()
-            tool_trace.append(
-                ToolTraceItem(
-                    tool=name, ok=True, detail=f"{len(content)} chars"
-                )
+            return _finish(
+                ToolTraceItem(tool=name, ok=True, detail=f"{len(content)} chars"),
+                content,
             )
-            return content
 
         if name == "list_tables":
             db = SessionLocal()
             try:
                 content = list_schema_summary(db)
-                tool_trace.append(ToolTraceItem(tool=name, ok=True))
-                return content
+                return _finish(ToolTraceItem(tool=name, ok=True), content)
             finally:
                 db.close()
 
@@ -308,19 +380,24 @@ def _dispatch_tool(
                 if len(matches) > 1:
                     choices_holder.clear()
                     choices_holder.extend(matches_to_choices(matches))
-                tool_trace.append(
+                return _finish(
                     ToolTraceItem(
-                        tool=name, ok=True, row_count=len(matches), detail=result.get("hint")
-                    )
+                        tool=name,
+                        ok=True,
+                        row_count=len(matches),
+                        detail=result.get("hint"),
+                    ),
+                    result,
                 )
-                return result
             finally:
                 db.close()
 
         if name == "analyze_debit_trends":
             db = SessionLocal()
             try:
+                t_sql = time.perf_counter()
                 result = analyze_debit_trends(db)
+                sql_ms = _ms_since(t_sql)
                 evidence_holder["columns"] = result["columns"]
                 evidence_holder["rows"] = result["rows"]
                 evidence_holder["sql"] = result["sql"]
@@ -329,11 +406,10 @@ def _dispatch_tool(
                     insights_holder.append(
                         {"type": item.get("type", "anomaly"), "message": item["message"]}
                     )
-                # Also keep a few MoM narrative lines as insights
                 for line in (result.get("insights") or [])[:6]:
                     if not any(i["message"] == line for i in insights_holder):
                         insights_holder.append({"type": "mom", "message": line})
-                tool_trace.append(
+                return _finish(
                     ToolTraceItem(
                         tool=name,
                         ok=True,
@@ -343,17 +419,58 @@ def _dispatch_tool(
                             f"anomaly_months={result['summary']['anomaly_months']}, "
                             f"anomaly_txns={result['summary']['anomaly_transactions']}"
                         ),
-                    )
+                    ),
+                    {
+                        "columns": result["columns"],
+                        "rows": result["rows"],
+                        "row_count": len(result["rows"]),
+                        "insights": result.get("insights") or [],
+                        "anomalies": result.get("anomalies") or [],
+                        "summary": result.get("summary"),
+                        "sql": result["sql"],
+                    },
                 )
-                return {
-                    "columns": result["columns"],
-                    "rows": result["rows"],
-                    "row_count": len(result["rows"]),
-                    "insights": result.get("insights") or [],
-                    "anomalies": result.get("anomalies") or [],
-                    "summary": result.get("summary"),
-                    "sql": result["sql"],
-                }
+            finally:
+                db.close()
+
+        if name == "summarize_merchant_spend":
+            db = SessionLocal()
+            try:
+                raw_keywords = arguments.get("keywords") or []
+                if isinstance(raw_keywords, str):
+                    raw_keywords = [raw_keywords]
+                t_sql = time.perf_counter()
+                result = summarize_merchant_spend(
+                    db,
+                    keywords=list(raw_keywords),
+                    period=str(arguments.get("period") or "this_month"),
+                    transaction_type=str(arguments.get("transaction_type") or "debit"),
+                )
+                sql_ms = _ms_since(t_sql)
+                if result.get("error"):
+                    return _finish(
+                        ToolTraceItem(tool=name, ok=False, detail=result["error"]),
+                        result,
+                    )
+                evidence_holder["columns"] = result["columns"]
+                evidence_holder["rows"] = result["rows"]
+                evidence_holder["sql"] = result["sql"]
+                summary = result.get("summary") or {}
+                txn_count = int(summary.get("txn_count") or 0)
+                return _finish(
+                    ToolTraceItem(
+                        tool=name,
+                        ok=True,
+                        sql=result.get("sql"),
+                        row_count=txn_count,
+                        detail=(
+                            f"total={summary.get('total_amount')}, "
+                            f"period={summary.get('period')}, "
+                            f"keywords={summary.get('keywords')}"
+                        ),
+                    ),
+                    result,
+                )
             finally:
                 db.close()
 
@@ -361,32 +478,40 @@ def _dispatch_tool(
             sql = str(arguments.get("sql") or "")
             db = SessionLocal()
             try:
+                t_sql = time.perf_counter()
                 columns, rows, executed = execute_readonly_sql(db, sql)
+                sql_ms = _ms_since(t_sql)
                 evidence_holder["columns"] = columns
                 evidence_holder["rows"] = rows
                 evidence_holder["sql"] = executed
-                tool_trace.append(
+                return _finish(
                     ToolTraceItem(
                         tool=name, ok=True, sql=executed, row_count=len(rows)
-                    )
+                    ),
+                    {
+                        "columns": columns,
+                        "rows": rows[:50],
+                        "row_count": len(rows),
+                        "sql": executed,
+                    },
                 )
-                return {
-                    "columns": columns,
-                    "rows": rows[:50],
-                    "row_count": len(rows),
-                    "sql": executed,
-                }
             finally:
                 db.close()
 
-        tool_trace.append(ToolTraceItem(tool=name, ok=False, detail="Unknown tool"))
-        return {"error": f"Unknown tool: {name}"}
+        return _finish(
+            ToolTraceItem(tool=name, ok=False, detail="Unknown tool"),
+            {"error": f"Unknown tool: {name}"},
+        )
     except SqlValidationError as exc:
-        tool_trace.append(ToolTraceItem(tool=name, ok=False, detail=str(exc)))
-        return {"error": str(exc)}
+        return _finish(
+            ToolTraceItem(tool=name, ok=False, detail=str(exc)),
+            {"error": str(exc)},
+        )
     except Exception as exc:  # noqa: BLE001
-        tool_trace.append(ToolTraceItem(tool=name, ok=False, detail=str(exc)))
-        return {"error": str(exc)}
+        return _finish(
+            ToolTraceItem(tool=name, ok=False, detail=str(exc)),
+            {"error": str(exc)},
+        )
 
 
 def _extract_text(response: types.GenerateContentResponse) -> str:
@@ -414,6 +539,7 @@ def _synthesize_final_answer(
     contents: list[types.Content],
     user_message: str,
     evidence_holder: dict[str, Any],
+    latency_holder: dict[str, Any] | None = None,
 ) -> str:
     """Force a text answer after tool rounds are exhausted."""
     evidence_summary = {
@@ -437,6 +563,7 @@ def _synthesize_final_answer(
             ],
         )
     )
+    t0 = time.perf_counter()
     response = client.models.generate_content(
         model=model,
         contents=contents,
@@ -445,6 +572,14 @@ def _synthesize_final_answer(
             temperature=0.1,
         ),
     )
+    llm_ms = _ms_since(t0)
+    if latency_holder is not None:
+        latency_holder["llm_ms"] = round(
+            float(latency_holder.get("llm_ms") or 0) + llm_ms, 1
+        )
+        latency_holder.setdefault("rounds", []).append(
+            {"round": len(latency_holder.get("rounds") or []) + 1, "llm_ms": llm_ms, "tool_ms": 0.0, "tools": []}
+        )
     return _extract_text(response) or (
         "Based on the query results available, I could not form a complete answer."
     )
@@ -459,7 +594,11 @@ def _run_gemini_tool_loop(
     tool_trace: list[ToolTraceItem],
     choices_holder: list[dict[str, str]],
     insights_holder: list[dict[str, str]],
+    latency_holder: dict[str, Any] | None = None,
 ) -> str:
+    if latency_holder is None:
+        latency_holder = _new_latency_holder()
+
     client = _gemini_client()
     contents: list[types.Content] = []
     for msg in history_messages:
@@ -478,15 +617,28 @@ def _run_gemini_tool_loop(
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
 
-    for _ in range(settings.max_tool_rounds):
+    for round_idx in range(settings.max_tool_rounds):
+        t_llm = time.perf_counter()
         response = client.models.generate_content(
             model=model,
             contents=contents,
             config=config,
         )
+        llm_ms = _ms_since(t_llm)
+        latency_holder["llm_ms"] = round(
+            float(latency_holder.get("llm_ms") or 0) + llm_ms, 1
+        )
 
         function_calls = list(response.function_calls or [])
         if not function_calls:
+            latency_holder.setdefault("rounds", []).append(
+                {
+                    "round": round_idx + 1,
+                    "llm_ms": llm_ms,
+                    "tool_ms": 0.0,
+                    "tools": [],
+                }
+            )
             return _extract_text(response) or (
                 "I could not produce an answer from the available data."
             )
@@ -496,9 +648,12 @@ def _run_gemini_tool_loop(
             contents.append(model_content)
 
         tool_parts: list[types.Part] = []
+        round_tool_ms = 0.0
+        round_tools: list[str] = []
         for call in function_calls:
             name = call.name or ""
             args = dict(call.args or {})
+            before = float(latency_holder.get("tool_ms") or 0)
             result = _dispatch_tool(
                 name,
                 args,
@@ -506,7 +661,11 @@ def _run_gemini_tool_loop(
                 tool_trace=tool_trace,
                 choices_holder=choices_holder,
                 insights_holder=insights_holder,
+                latency_holder=latency_holder,
             )
+            after = float(latency_holder.get("tool_ms") or 0)
+            round_tool_ms = round(round_tool_ms + (after - before), 1)
+            round_tools.append(name)
             if name == "read_database_guide" and isinstance(result, str) and len(result) > 2500:
                 result = result[:2500] + "\n…[truncated]…"
             tool_parts.append(
@@ -518,6 +677,14 @@ def _run_gemini_tool_loop(
                 )
             )
         contents.append(types.Content(role="user", parts=tool_parts))
+        latency_holder.setdefault("rounds", []).append(
+            {
+                "round": round_idx + 1,
+                "llm_ms": llm_ms,
+                "tool_ms": round_tool_ms,
+                "tools": round_tools,
+            }
+        )
 
         # If ambiguous accounts found, stop early — UI will show chips
         if len(choices_holder) > 1:
@@ -534,6 +701,7 @@ def _run_gemini_tool_loop(
         contents=contents,
         user_message=user_message,
         evidence_holder=evidence_holder,
+        latency_holder=latency_holder,
     )
 
 
@@ -596,14 +764,18 @@ async def run_chat_agent(
     previous_answer: str | None = None,
 ) -> ChatResponse:
     _ = db
+    t_total = time.perf_counter()
     model, mode = _resolve_model(optimize_for)
     tool_trace: list[ToolTraceItem] = []
     evidence_holder: dict[str, Any] = {"columns": [], "rows": [], "sql": None}
     choices_holder: list[dict[str, str]] = []
     insights_holder: list[dict[str, str]] = []
+    latency_holder = _new_latency_holder()
 
     if not retry:
+        t_pre = time.perf_counter()
         pre_choices, pre_answer = _maybe_precheck_ambiguity(user_message)
+        pre_ms = _ms_since(t_pre)
         if pre_choices and pre_answer:
             session_store.append_messages(
                 session.session_id,
@@ -611,6 +783,20 @@ async def run_chat_agent(
                     {"role": "user", "content": user_message},
                     {"role": "assistant", "content": pre_answer},
                 ],
+            )
+            latency = LatencyBreakdown(
+                total_ms=_ms_since(t_total),
+                llm_ms=0,
+                sql_ms=0,
+                tool_ms=pre_ms,
+                postprocess_ms=0,
+                rounds=[],
+            )
+            logger.info(
+                "chat latency session=%s total_ms=%.1f llm_ms=0 sql_ms=0 tool_ms=%.1f (precheck)",
+                session.session_id,
+                latency.total_ms,
+                pre_ms,
             )
             return ChatResponse(
                 session_id=session.session_id,
@@ -623,6 +809,7 @@ async def run_chat_agent(
                         ok=True,
                         row_count=len(pre_choices),
                         detail="precheck ambiguity",
+                        duration_ms=pre_ms,
                     )
                 ],
                 confidence="medium",
@@ -631,6 +818,7 @@ async def run_chat_agent(
                 retried=False,
                 choices=[ClarificationChoice(**c) for c in pre_choices],
                 insights=[],
+                latency=latency,
             )
 
     history_messages = [
@@ -647,7 +835,8 @@ async def run_chat_agent(
             f"Previous SQL (DO NOT reuse this exact query): {previous_sql or 'unknown'}\n"
             f"Previous answer summary: {(previous_answer or '')[:500]}\n\n"
             "Write a DIFFERENT SQL approach (different filters, grouping, or date window), "
-            "or use analyze_debit_trends if it's a spend/growth question, then answer from new results."
+            "or use summarize_merchant_spend for how-much/merchant totals, "
+            "or analyze_debit_trends for MoM/growth, then answer from new results."
         )
 
     import asyncio
@@ -661,8 +850,10 @@ async def run_chat_agent(
         tool_trace=tool_trace,
         choices_holder=choices_holder,
         insights_holder=insights_holder,
+        latency_holder=latency_holder,
     )
 
+    t_post = time.perf_counter()
     answer, status, confidence = _infer_status(
         raw_answer,
         evidence_holder,
@@ -687,6 +878,30 @@ async def run_chat_agent(
         session.session_id,
         {"columns": evidence.columns, "rows": evidence.rows, "sql": evidence.sql},
     )
+    postprocess_ms = _ms_since(t_post)
+    total_ms = _ms_since(t_total)
+    latency = LatencyBreakdown(
+        total_ms=total_ms,
+        llm_ms=float(latency_holder.get("llm_ms") or 0),
+        sql_ms=float(latency_holder.get("sql_ms") or 0),
+        tool_ms=float(latency_holder.get("tool_ms") or 0),
+        postprocess_ms=postprocess_ms,
+        rounds=[
+            LatencyRound(**r) if isinstance(r, dict) else r
+            for r in (latency_holder.get("rounds") or [])
+        ],
+    )
+    logger.info(
+        "chat latency session=%s total_ms=%.1f llm_ms=%.1f sql_ms=%.1f tool_ms=%.1f "
+        "postprocess_ms=%.1f rounds=%d",
+        session.session_id,
+        latency.total_ms,
+        latency.llm_ms,
+        latency.sql_ms,
+        latency.tool_ms,
+        latency.postprocess_ms,
+        len(latency.rounds),
+    )
 
     return ChatResponse(
         session_id=session.session_id,
@@ -702,4 +917,5 @@ async def run_chat_agent(
         retried=retry,
         choices=[ClarificationChoice(**c) for c in choices_holder],
         insights=[InsightCallout(**i) for i in insights_holder],
+        latency=latency,
     )

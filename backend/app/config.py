@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     )
 
     database_url: str = (
-        "mysql+pymysql://tiby:tiby@10.20.16.135:29047/tiby_hackathon"
+        "mysql+pymysql://tiby:tiby@3.91.96.208:3306/tiby_hackathon"
     )
     app_name: str = "TBX Finance Assistant API"
     cors_origins: list[str] = ["*"]

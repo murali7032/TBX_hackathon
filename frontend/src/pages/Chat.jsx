@@ -58,6 +58,7 @@ function Chat() {
         data: data.data && typeof data.data === "object" ? data.data : null,
         evidence: data.evidence || null,
         tool_trace: data.tool_trace || [],
+        latency: data.latency || null,
         confidence: data.confidence,
         status: data.status,
         choices: data.choices || [],

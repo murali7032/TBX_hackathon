@@ -87,6 +87,23 @@ class ToolTraceItem(BaseModel):
     sql: str | None = None
     row_count: int | None = None
     detail: str | None = None
+    duration_ms: float | None = None
+
+
+class LatencyRound(BaseModel):
+    round: int
+    llm_ms: float = 0
+    tool_ms: float = 0
+    tools: list[str] = Field(default_factory=list)
+
+
+class LatencyBreakdown(BaseModel):
+    total_ms: float = 0
+    llm_ms: float = 0
+    sql_ms: float = 0
+    tool_ms: float = 0
+    postprocess_ms: float = 0
+    rounds: list[LatencyRound] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):
@@ -104,6 +121,7 @@ class ChatResponse(BaseModel):
     retried: bool = False
     choices: list[ClarificationChoice] = Field(default_factory=list)
     insights: list[InsightCallout] = Field(default_factory=list)
+    latency: LatencyBreakdown | None = None
 
 
 class ChatHistoryMessage(BaseModel):

@@ -17,6 +17,23 @@ FORBIDDEN_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+AGGREGATE_PATTERN = re.compile(
+    r"\b(SUM|COUNT|AVG|MIN|MAX)\s*\(",
+    re.IGNORECASE,
+)
+
+# SELECT * / SELECT t.* from transaction without aggregates — forces full-row dumps
+TXN_STAR_DUMP_PATTERN = re.compile(
+    r"SELECT\s+(?:[\w`]+\.)?\*\s+FROM\s+`?transaction`?",
+    re.IGNORECASE,
+)
+
+# Tight filters that allow a non-aggregate transaction row lookup
+TXN_TIGHT_FILTER_PATTERN = re.compile(
+    r"\b(transaction_id|transaction_reference_id|utr_number)\s*=",
+    re.IGNORECASE,
+)
+
 
 class SqlValidationError(ValueError):
     pass
@@ -41,6 +58,30 @@ def normalize_sql_dialect(sql: str) -> str:
     return out
 
 
+def _is_scalar_aggregate(sql: str) -> bool:
+    """True when query uses aggregates and has no GROUP BY (single summary row)."""
+    if not AGGREGATE_PATTERN.search(sql):
+        return False
+    if re.search(r"\bGROUP\s+BY\b", sql, re.IGNORECASE):
+        return False
+    return True
+
+
+def _reject_transaction_star_dump(sql: str) -> None:
+    """Block SELECT * FROM transaction dumps that should be aggregations instead."""
+    if not TXN_STAR_DUMP_PATTERN.search(sql):
+        return
+    if AGGREGATE_PATTERN.search(sql):
+        return
+    if TXN_TIGHT_FILTER_PATTERN.search(sql):
+        return
+    raise SqlValidationError(
+        "Use SUM/COUNT or summarize_merchant_spend for spend totals. "
+        "Do not SELECT * FROM `transaction` without an aggregate or "
+        "an exact transaction_id / transaction_reference_id / utr_number filter."
+    )
+
+
 def assert_read_only_sql(sql: str) -> str:
     cleaned = sql.strip().rstrip(";").strip()
     if not cleaned:
@@ -52,7 +93,9 @@ def assert_read_only_sql(sql: str) -> str:
     upper = cleaned.lstrip().upper()
     if not (upper.startswith("SELECT") or upper.startswith("WITH")):
         raise SqlValidationError("Query must start with SELECT or WITH")
-    return normalize_sql_dialect(cleaned)
+    normalized = normalize_sql_dialect(cleaned)
+    _reject_transaction_star_dump(normalized)
+    return normalized
 
 
 def _serialize_cell(value: Any) -> Any:
@@ -77,10 +120,11 @@ def execute_readonly_sql(
     safe_sql = assert_read_only_sql(sql)
     limit = row_limit if row_limit is not None else settings.sql_row_limit
 
-    # Enforce a soft row cap when the caller did not include LIMIT
+    # Soft row cap for list queries; skip for scalar aggregates (SUM/COUNT/…)
     wrapped = safe_sql
     if not re.search(r"\bLIMIT\b", safe_sql, re.IGNORECASE):
-        wrapped = f"{safe_sql}\nLIMIT {int(limit)}"
+        if not _is_scalar_aggregate(safe_sql):
+            wrapped = f"{safe_sql}\nLIMIT {int(limit)}"
 
     # MySQL max execution time in milliseconds (0 = unlimited)
     timeout_ms = max(1, int(settings.sql_timeout_ms))

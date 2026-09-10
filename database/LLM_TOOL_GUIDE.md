@@ -4,10 +4,12 @@ Use this document as system/context for an LLM that answers finance questions by
 
 **Database:** `tiby_hackathon` (MySQL)  
 **Tables:** `bank`, `account`, `transaction` (exactly 3)  
-**Seed size:** 10 banks · 10 accounts · 10 transactions  
+**Typical size:** 10 banks · 10 accounts · ~10M transactions (local seed is small; large-scale load is bulk)  
 **Do not invent** banks, accounts, balances, or transactions that are not returned by tools.
 
 **MySQL dialect:** backticks for `` `transaction` ``; `LIKE` not `ILIKE`; `DATE_FORMAT(col, '%Y-%m-01')` for month buckets; no `::` casts / `date_trunc` / `PERCENTILE_CONT`.
+
+**Spend totals:** prefer the `summarize_merchant_spend` tool (COUNT + SUM with date bounds). Never `SELECT *` to total in prose. Keyword stems must be **≥ 4 characters** (do not use `NET` — it matches `INET` inside IMPS).
 
 ---
 
@@ -179,7 +181,10 @@ WHERE t.transaction_reference_id = :ref;   -- exact match first
 There is no vendor table. User phrases like “Selection”, “UPI”, “NEFT to mobile shop”,
 or “payments similar to Reliance” must be answered with `description LIKE`.
 
-Expand related tokens with OR (do not require the full narration string):
+**Keyword hygiene:** use stems **≥ 4 alphanumeric characters**. Never expand to short
+fragments like `NET` / `FLI` — they match rail noise (`INET` inside IMPS narrations).
+
+For **list/sample** rows (not totals), expand related tokens with OR:
 
 ```sql
 SELECT transaction_id, transaction_date, transaction_type,
@@ -191,31 +196,36 @@ WHERE (
   OR description LIKE '%NAVYUG SELECTION%'
 )
 ORDER BY transaction_date DESC
-LIMIT 50;
+LIMIT 20;
 ```
 
-Rails / transfer keywords:
+Rails / transfer keywords (full tokens, not 3-letter stems):
 
 ```sql
-WHERE description LIKE '%UPI%'
+WHERE description LIKE '%UPI-%'
    OR description LIKE '%NEFT%'
    OR description LIKE '%IMPS%'
    OR description LIKE '%FT -%';
 ```
 
-Spend total for a merchant family:
+### Spend total for a merchant (“how much / spent this month”)
+
+**Prefer tool:** `summarize_merchant_spend` with e.g.
+`keywords=["NETFLIX"]`, `period="this_month"`, `transaction_type="debit"`.
+
+If using raw SQL instead:
 
 ```sql
-SELECT COUNT(*) AS n, SUM(transaction_amount) AS total
+SELECT COUNT(*) AS n, COALESCE(SUM(transaction_amount), 0) AS total
 FROM `transaction`
 WHERE transaction_type = 'debit'
-  AND (
-       description LIKE '%SELECTION%'
-    OR description LIKE '%SELECTRICITY%'
-  );
+  AND transaction_date >= :month_start
+  AND transaction_date <  :month_end
+  AND description LIKE '%NETFLIX%';
 ```
 
-If 0 rows, broaden the stem (shorter token) once, then report no match.
+Do **not** `SELECT * … LIMIT 50` and sum in the model. If 0 rows, broaden the stem once
+(still ≥ 4 chars), then report no match.
 
 ### Date range
 ```sql
@@ -299,9 +309,13 @@ Never filter with `description = 'full user sentence'`.
 → `WHERE transaction_reference_id = 'HDFCH01078329532'`.
 
 **User:** “How much did we pay Selection / similar merchants?”  
-→ `SUM(transaction_amount)` on `` `transaction` `` with  
-`description LIKE '%SELECTION%' OR description LIKE '%SELECTRICITY%' OR description LIKE '%NAVYUG SELECTION%'`  
-and usually `transaction_type = 'debit'`. Do not require an exact description string.
+→ Call `summarize_merchant_spend` with  
+`keywords=["SELECTION","SELECTRICITY"]`, `transaction_type="debit"`  
+(or equivalent `SUM`/`COUNT` SQL). Do not require an exact description string.  
+Do not use short stems like `NET` for Netflix — use `NETFLIX`.
+
+**User:** “How much did we spend on Netflix this month?”  
+→ `summarize_merchant_spend(keywords=["NETFLIX"], period="this_month", transaction_type="debit")`.
 
 **User:** “Total debits on that HDFC account ending 9069.”  
 → Resolve account by `RIGHT(account_number,4) = '9069'` and `bank_code = 'HDFC'`, then `SUM(transaction_amount) WHERE transaction_type = 'debit'`.

@@ -118,26 +118,79 @@ function ExportButtons({ columns, rows }) {
   );
 }
 
-function EvidenceBlock({ evidence, userQuestion, answerText }) {
+function formatMs(ms) {
+  if (ms == null || Number.isNaN(Number(ms))) return null;
+  const n = Number(ms);
+  if (n >= 1000) return `${(n / 1000).toFixed(2)}s`;
+  return `${Math.round(n)}ms`;
+}
+
+function LatencyBlock({ latency, toolTrace }) {
+  if (!latency && !(toolTrace && toolTrace.length)) return null;
+  const total = formatMs(latency?.total_ms);
+  const llm = formatMs(latency?.llm_ms);
+  const sql = formatMs(latency?.sql_ms);
+  const tools = formatMs(latency?.tool_ms);
+  const rounds = latency?.rounds || [];
+
+  return (
+    <div className="latency-block">
+      <div className="latency-summary">
+        {total && <span>Total {total}</span>}
+        {llm && <span>LLM {llm}</span>}
+        {sql && <span>SQL {sql}</span>}
+        {tools && <span>Tools {tools}</span>}
+      </div>
+      {rounds.length > 0 && (
+        <div className="latency-rounds">
+          {rounds.map((r) => (
+            <span key={r.round} className="latency-round-chip">
+              R{r.round}: LLM {formatMs(r.llm_ms) || "0ms"}
+              {r.tool_ms > 0 ? ` · tools ${formatMs(r.tool_ms)}` : ""}
+              {r.tools?.length ? ` (${r.tools.join(", ")})` : ""}
+            </span>
+          ))}
+        </div>
+      )}
+      {toolTrace?.length > 0 && (
+        <div className="latency-tools">
+          {toolTrace.map((t, i) => (
+            <span key={`${t.tool}-${i}`} className="latency-tool-chip">
+              {t.tool}
+              {t.duration_ms != null ? ` ${formatMs(t.duration_ms)}` : ""}
+              {t.ok === false ? " ✗" : ""}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EvidenceBlock({ evidence, userQuestion, answerText, latency, toolTrace }) {
   const [open, setOpen] = useState(false);
   const table = resolveTable(evidence, answerText);
-  if (!table?.columns?.length && !table?.sql) return null;
+  const hasLatency = Boolean(latency?.total_ms != null || toolTrace?.length);
+  if (!table?.columns?.length && !table?.sql && !hasLatency) return null;
 
   // Prefer structured evidence for the dropdown; markdown-only tables still allowed
-  const hasEvidence = Boolean(evidence?.columns?.length || evidence?.sql || table?.columns?.length);
+  const hasEvidence = Boolean(
+    evidence?.columns?.length || evidence?.sql || table?.columns?.length || hasLatency
+  );
   if (!hasEvidence) return null;
 
-  const rows = table.rows || [];
-  const colsLower = (table.columns || []).map((c) => String(c).toLowerCase());
+  const rows = table?.rows || [];
+  const colsLower = (table?.columns || []).map((c) => String(c).toLowerCase());
   const anomIdx = colsLower.findIndex((c) => c === "is_anomaly");
   const momIdx = colsLower.findIndex((c) => c.includes("mom"));
   const rowCount = rows.length;
   const title = momIdx >= 0 ? "Show me the math" : "Evidence & SQL";
+  const totalLabel = formatMs(latency?.total_ms);
 
   return (
     <div className="evidence-block evidence-collapsed-wrap">
       {/* Charts stay visible for growth/spend answers */}
-      {table.columns?.length > 0 && (
+      {table?.columns?.length > 0 && (
         <EvidenceChart
           evidence={{ columns: table.columns, rows }}
           userQuestion={userQuestion}
@@ -156,7 +209,8 @@ function EvidenceBlock({ evidence, userQuestion, answerText }) {
         </span>
         <span className="evidence-toggle-meta">
           {rowCount} row{rowCount === 1 ? "" : "s"}
-          {table.sql ? " · SQL available" : ""}
+          {table?.sql ? " · SQL available" : ""}
+          {totalLabel ? ` · ${totalLabel}` : ""}
         </span>
       </button>
 
@@ -164,17 +218,18 @@ function EvidenceBlock({ evidence, userQuestion, answerText }) {
         <div className="evidence-dropdown">
           <div className="evidence-header">
             <div className="evidence-title">{title}</div>
-            {table.columns?.length > 0 && (
+            {table?.columns?.length > 0 && (
               <ExportButtons columns={table.columns} rows={rows} />
             )}
           </div>
-          {table.sql && (
+          <LatencyBlock latency={latency} toolTrace={toolTrace} />
+          {table?.sql && (
             <div className="evidence-sql-wrap">
               <div className="evidence-sql-label">SQL query</div>
               <pre className="evidence-sql">{table.sql}</pre>
             </div>
           )}
-          {table.columns?.length > 0 && (
+          {table?.columns?.length > 0 && (
             <div className="evidence-table-wrap">
               <table className="evidence-table">
                 <thead>
@@ -209,7 +264,7 @@ function EvidenceBlock({ evidence, userQuestion, answerText }) {
               </table>
             </div>
           )}
-          {table.columns?.length > 0 && (
+          {table?.columns?.length > 0 && (
             <ExportButtons columns={table.columns} rows={rows} />
           )}
         </div>
@@ -356,12 +411,23 @@ function ChatMessage({
               evidence={message?.evidence}
               userQuestion={message?.userQuestion}
               answerText={text}
+              latency={message?.latency}
+              toolTrace={message?.tool_trace}
             />
-            {(message?.status || message?.confidence) && (
+            {(message?.status || message?.confidence || message?.latency) && (
               <div className="chat-meta">
                 {message.status && <span>status: {message.status}</span>}
                 {message.confidence && (
                   <span>confidence: {message.confidence}</span>
+                )}
+                {message.latency?.total_ms != null && (
+                  <span>
+                    latency: {formatMs(message.latency.total_ms)}
+                    {" · "}
+                    LLM {formatMs(message.latency.llm_ms) || "—"}
+                    {" · "}
+                    SQL {formatMs(message.latency.sql_ms) || "—"}
+                  </span>
                 )}
               </div>
             )}
